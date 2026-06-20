@@ -590,16 +590,13 @@ function generateInvoice(e) {
     advancePayment: totals.advance, balance: totals.balance, paidStatus: data.paidStatus, paidMethod: data.paidMethod,
     totalCost: totals.cost, profit: totals.profit, items, notes: data.notes
   };
+  // Bills / Invoices are saved only in the Bills / Invoices database.
+  // They do not create Orders, Costs, Profit, Income, or Budget records.
+  // Orders are created only from selected Item Details records.
   db.invoices.unshift(invoiceRecord);
-  db.orders.unshift({
-    id: id('ORDER'), createdAt: invoiceRecord.createdAt, orderId: data.no, customer: data.customer,
-    model: items.map(item => item.model).join(', '), datePrinted: data.date, price: totals.total,
-    paidStatus: data.paidStatus, paidMethod: data.paidMethod, advancePayment: totals.advance,
-    totalCost: totals.cost, profit: totals.profit, items, notes: data.notes, invoiceId: invoiceRecord.id
-  });
   saveDb();
   $('#invoiceNo').value = docId('INV');
-  toast('Invoice saved to Bills / Invoices and Orders databases');
+  toast('Invoice saved to Bills / Invoices database only');
 }
 
 function generateQuotation(e) {
@@ -792,7 +789,30 @@ function deleteRecord(recordId, kind) {
   if (!confirm('Delete this record?')) return;
   const map = { item: 'itemRecords', order: 'orders', invoice: 'invoices', quote: 'quotes', budget: 'budget', custom: 'customRecords' };
   const key = map[kind];
-  db[key] = db[key].filter(item => item.id !== recordId);
+  if (!key || !Array.isArray(db[key])) return;
+
+  if (kind === 'invoice') {
+    const invoice = db.invoices.find(item => item.id === recordId);
+    const invoiceNo = invoice ? (invoice.invoiceNo || invoice.orderId || '') : '';
+
+    // Clean up old versions that incorrectly created an Order from a Bill/Invoice.
+    // New invoices do NOT create Orders anymore.
+    const linkedOrderIds = new Set((db.orders || [])
+      .filter(order => order.invoiceId === recordId || (invoiceNo && order.invoiceId && order.orderId === invoiceNo))
+      .map(order => order.id));
+
+    db.invoices = db.invoices.filter(item => item.id !== recordId);
+    if (linkedOrderIds.size) {
+      db.orders = (db.orders || []).filter(order => !linkedOrderIds.has(order.id));
+      db.budget = (db.budget || []).filter(record => !(record.source === 'Order' && linkedOrderIds.has(record.sourceId)));
+    }
+  } else if (kind === 'order') {
+    db.orders = (db.orders || []).filter(item => item.id !== recordId);
+    db.budget = (db.budget || []).filter(record => !(record.source === 'Order' && record.sourceId === recordId));
+  } else {
+    db[key] = db[key].filter(item => item.id !== recordId);
+  }
+
   saveDb();
 }
 
@@ -1128,7 +1148,7 @@ function renderDatabaseSummary() {
     <article class="db-summary-card unpaid-card">
       <span>Unpaid Orders</span>
       <b>${money(unpaidAmount)}</b>
-      <small>${unpaidOrders.length} unpaid / advance orders</small>
+      <small>${unpaidOrders.length} unpaid orders</small>
     </article>
     <article class="db-summary-card custom-total-card">
       <span>Custom Tables Total</span>
