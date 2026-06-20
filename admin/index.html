@@ -217,23 +217,23 @@
           <article class="admin-card">
             <div class="card-title"><span class="eyebrow">Budget</span><h2>Add Income / Expense</h2></div>
             <form id="budgetForm" class="admin-form">
+              <input id="budgetEditId" type="hidden">
               <div class="form-grid admin-form-grid two">
                 <label class="field"><span>Date</span><input id="budgetDate" type="date"></label>
                 <label class="field"><span>Type</span><select id="budgetType"><option>Expense</option><option>Income</option></select></label>
-                <label class="field"><span>Category</span><input id="budgetCategory" type="text" placeholder="Filament / Order Payment"></label>
+                <label class="field"><span>Category</span><input id="budgetCategory" type="text" placeholder="General Income / General Expense"></label>
                 <label class="field"><span>Amount Rs</span><input id="budgetAmount" type="number" step="0.01" required></label>
-                <label class="field"><span>Payment Method</span><input id="budgetMethod" type="text" placeholder="Cash / Bank"></label>
-                <label class="field"><span>Reference</span><input id="budgetReference" type="text" placeholder="Invoice / note"></label>
+                <label class="field"><span>Source</span><input id="budgetSource" type="text" placeholder="Manual / Order"></label>
                 <label class="field full"><span>Description</span><input id="budgetDescription" type="text" placeholder="Short description"></label>
-                <label class="field full"><span>Notes</span><textarea id="budgetNotes" rows="3"></textarea></label>
               </div>
-              <div class="admin-actions"><button class="btn primary" type="submit">Save Budget Record</button><button class="btn ghost" id="syncBudgetBtn" type="button">Sync Orders to Budget</button></div>
+              <div class="admin-actions"><button class="btn primary" id="budgetSaveBtn" type="submit">Save Budget Record</button><button class="btn ghost" id="budgetCancelEditBtn" type="button" hidden>Cancel Edit</button><button class="btn ghost" id="syncBudgetBtn" type="button">Sync Orders to Budget</button></div>
+              <p class="muted budget-field-note">Budget records use only: ID, Date, Type, Category, Description, Amount and Source.</p>
             </form>
           </article>
           <article class="admin-card">
             <div class="card-title"><span class="eyebrow">Budget Records</span><h2>Income and expenses</h2></div>
-            <div class="summary-grid"><div><span>Income</span><b id="budgetIncome">Rs 0.00</b></div><div><span>Expenses</span><b id="budgetExpense">Rs 0.00</b></div><div><span>Balance</span><b id="budgetBalance">Rs 0.00</b></div></div>
-            <div class="table-wrap compact-table"><table><thead><tr><th>Date</th><th>Type</th><th>Category</th><th>Amount</th><th>Source</th><th></th></tr></thead><tbody id="budgetBody"></tbody></table></div>
+            <div class="summary-grid budget-summary-grid"><div class="budget-summary-card income-card"><span>Income</span><b id="budgetIncome">Rs 0.00</b></div><div class="budget-summary-card expense-card"><span>Expenses</span><b id="budgetExpense">Rs 0.00</b></div><div class="budget-summary-card balance-card"><span>Balance</span><b id="budgetBalance">Rs 0.00</b></div></div>
+            <div class="table-wrap compact-table budget-table-wrap"><table><thead><tr><th>ID</th><th>Date</th><th>Type</th><th>Category</th><th>Description</th><th>Amount</th><th>Source</th><th>Actions</th></tr></thead><tbody id="budgetBody"></tbody></table></div>
           </article>
         </div>
       </section>

@@ -957,22 +957,64 @@ function renderCustomGroups() {
 function initBudget() {
   $('#budgetForm').addEventListener('submit', e => {
     e.preventDefault();
-    db.budget.unshift({
-      id: id('BUDGET'), createdAt: nowStamp(), entryDate: $('#budgetDate').value || todayISO(),
-      entryType: $('#budgetType').value, category: $('#budgetCategory').value.trim(), description: $('#budgetDescription').value.trim(),
-      amount: num($('#budgetAmount').value), paymentMethod: $('#budgetMethod').value.trim(), reference: $('#budgetReference').value.trim(),
-      notes: $('#budgetNotes').value.trim(), source: 'Manual', sourceId: ''
-    });
-    $('#budgetForm').reset();
-    $('#budgetDate').value = todayISO();
+    const editId = $('#budgetEditId') ? $('#budgetEditId').value : '';
+    const payload = {
+      entryDate: $('#budgetDate').value || todayISO(),
+      entryType: $('#budgetType').value,
+      category: $('#budgetCategory').value.trim(),
+      description: $('#budgetDescription').value.trim(),
+      amount: num($('#budgetAmount').value),
+      source: ($('#budgetSource').value || 'Manual').trim() || 'Manual'
+    };
+    if (editId) {
+      const record = db.budget.find(r => r.id === editId);
+      if (!record) return alert('Budget record not found.');
+      Object.assign(record, payload, { updatedAt: nowStamp() });
+      toast('Budget record updated');
+    } else {
+      db.budget.unshift({ id: id('BUDGET'), createdAt: nowStamp(), ...payload, sourceId: '' });
+      toast('Budget record saved');
+    }
+    resetBudgetForm();
     saveDb();
-    toast('Budget record saved');
   });
   $('#syncBudgetBtn').addEventListener('click', syncOrdersToBudget);
+  const cancelBtn = $('#budgetCancelEditBtn');
+  if (cancelBtn) cancelBtn.addEventListener('click', resetBudgetForm);
   $('#budgetBody').addEventListener('click', e => {
+    const edit = e.target.closest('[data-budget-edit]');
+    if (edit) return editBudgetRecord(edit.dataset.budgetEdit);
     const del = e.target.closest('[data-delete]');
     if (del) deleteRecord(del.dataset.delete, 'budget');
   });
+}
+
+function resetBudgetForm() {
+  $('#budgetForm').reset();
+  $('#budgetDate').value = todayISO();
+  $('#budgetEditId').value = '';
+  if ($('#budgetSource')) $('#budgetSource').value = 'Manual';
+  const saveBtn = $('#budgetSaveBtn');
+  const cancelBtn = $('#budgetCancelEditBtn');
+  if (saveBtn) saveBtn.textContent = 'Save Budget Record';
+  if (cancelBtn) cancelBtn.hidden = true;
+}
+
+function editBudgetRecord(recordId) {
+  const record = db.budget.find(r => r.id === recordId);
+  if (!record) return alert('Budget record not found.');
+  $('#budgetEditId').value = record.id;
+  $('#budgetDate').value = record.entryDate || todayISO();
+  $('#budgetType').value = record.entryType || 'Expense';
+  $('#budgetCategory').value = record.category || '';
+  $('#budgetAmount').value = num(record.amount) || '';
+  $('#budgetSource').value = record.source || 'Manual';
+  $('#budgetDescription').value = record.description || '';
+  const saveBtn = $('#budgetSaveBtn');
+  const cancelBtn = $('#budgetCancelEditBtn');
+  if (saveBtn) saveBtn.textContent = 'Update Budget Record';
+  if (cancelBtn) cancelBtn.hidden = false;
+  $('#budgetForm').scrollIntoView({ behavior: 'smooth', block: 'start' });
 }
 
 function syncOrdersToBudget() {
@@ -1000,7 +1042,16 @@ function renderBudget() {
   $('#budgetIncome').textContent = money(income);
   $('#budgetExpense').textContent = money(expense);
   $('#budgetBalance').textContent = money(income - expense);
-  $('#budgetBody').innerHTML = db.budget.map(r => `<tr><td>${safe(r.entryDate)}</td><td><span class="pill-status ${String(r.entryType).toLowerCase()}">${safe(r.entryType)}</span></td><td>${safe(r.category)}</td><td>${money(r.amount)}</td><td>${safe(r.source || 'Manual')}</td><td><button class="small-btn" data-delete="${r.id}">Delete</button></td></tr>`).join('') || '<tr><td colspan="6" class="muted">No budget records yet.</td></tr>';
+  $('#budgetBody').innerHTML = db.budget.map(r => `<tr>
+    <td>${safe(r.desktopId || r.id)}</td>
+    <td>${safe(r.entryDate)}</td>
+    <td><span class="pill-status ${String(r.entryType).toLowerCase()}">${safe(r.entryType)}</span></td>
+    <td>${safe(r.category)}</td>
+    <td>${safe(r.description)}</td>
+    <td>${money(r.amount)}</td>
+    <td>${safe(r.source || 'Manual')}</td>
+    <td><button class="small-btn" data-budget-edit="${r.id}">Edit</button> <button class="small-btn danger" data-delete="${r.id}">Delete</button></td>
+  </tr>`).join('') || '<tr><td colspan="8" class="muted">No budget records yet.</td></tr>';
 }
 
 function uniqueCustomerCount(rows) {
