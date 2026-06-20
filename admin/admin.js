@@ -160,14 +160,18 @@ function scheduleCloudSave() {
 async function writeCloudNow() {
   if (!firebaseStore || !firebaseUser || applyingRemote) return;
   try {
+    // Exact replacement mode: every website save writes the whole admin database.
+    // This prevents old bill/order/profit records from staying in Firebase after
+    // you deleted or replaced them from the website or desktop software.
     await firebaseStore.doc(CLOUD_DOC_PATH).set({
       database: firestoreSafe(db),
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
       updatedBy: firebaseUser.email || firebaseUser.uid,
-      schemaVersion: 2
-    }, { merge: true });
+      replaceMode: true,
+      schemaVersion: 4
+    });
     cloudReady = true;
-    setCloudStatus('Cloud: saved', 'ok');
+    setCloudStatus('Cloud: saved / replaced latest database', 'ok');
   } catch (err) {
     console.error(err);
     setCloudStatus('Cloud: save failed', 'error');
@@ -1327,34 +1331,21 @@ async function importDesktopSqlite(file) {
       price: num(r.price),
       notes: r.notes || 'Imported from desktop SQLite database'
     }));
-    const a = upsertMany(db.itemRecords, mappedItems);
-    const mappedInvoices = mappedOrders.map(order => ({
-      id: order.id.replace('DESKTOP-ORDER-', 'DESKTOP-INVOICE-'),
-      desktopId: order.desktopId,
-      createdAt: order.createdAt,
-      invoiceNo: order.orderId,
-      orderId: order.orderId,
-      customer: order.customer,
-      date: order.datePrinted,
-      subtotal: order.price,
-      discount: 0,
-      total: order.price,
-      advancePayment: order.advancePayment,
-      balance: Math.max(0, num(order.price) - num(order.advancePayment)),
-      paidStatus: order.paidStatus,
-      paidMethod: order.paidMethod,
-      totalCost: order.totalCost,
-      profit: order.profit,
-      items: order.items || [],
-      notes: order.notes
-    }));
-    const b = upsertMany(db.orders, mappedOrders);
-    const bi = upsertMany(db.invoices, mappedInvoices);
-    const c = upsertMany(db.budget, mappedBudget);
-    const d = upsertMany(db.customGroups, mappedGroups);
-    const e = upsertMany(db.customRecords, mappedCustom);
+    // Exact replacement mode: an imported desktop SQLite database becomes the
+    // complete latest admin database. It does NOT merge with old browser/cloud
+    // records and it does NOT convert desktop orders into bill/invoice records.
+    db = normalizeImportedAdminDb({
+      config: db.config || defaultDb().config,
+      itemRecords: mappedItems,
+      orders: mappedOrders,
+      invoices: [],
+      quotes: [],
+      budget: mappedBudget,
+      customGroups: mappedGroups,
+      customRecords: mappedCustom
+    });
     saveDb();
-    toast(`Desktop database imported: ${a.added + b.added + bi.added + c.added + d.added + e.added} new, ${a.updated + b.updated + bi.updated + c.updated + d.updated + e.updated} updated`);
+    toast(`Desktop database replaced cloud: ${mappedItems.length} items, ${mappedOrders.length} orders, ${mappedBudget.length} budget records, ${mappedCustom.length} custom records`);
   } catch (err) {
     console.error(err);
     alert('Could not import SQLite directly. Use the included tools/convert_desktop_db_to_admin_json.py converter, then import the JSON file.');
@@ -1373,7 +1364,7 @@ function initSettings() {
         const imported = normalizeImportedAdminDb(JSON.parse(reader.result));
         db = imported;
         saveDb();
-        toast('JSON database imported');
+        toast('JSON database imported and replaced cloud database');
       } catch (err) {
         alert('Invalid JSON file.');
       }
@@ -1390,7 +1381,7 @@ function initSettings() {
     if (!confirm('This will clear the Firebase cloud admin database and the local cache. Continue?')) return;
     db = defaultDb();
     saveDb();
-    toast('Cloud database cleared');
+    toast('Cloud database cleared and replaced');
   });
 }
 
