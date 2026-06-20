@@ -213,8 +213,8 @@
       </section>
 
       <section class="admin-section" id="section-budget">
-        <div class="admin-grid two">
-          <article class="admin-card">
+        <div class="admin-grid budget-full-grid">
+          <article class="admin-card budget-form-card">
             <div class="card-title"><span class="eyebrow">Budget</span><h2>Add Income / Expense</h2></div>
             <form id="budgetForm" class="admin-form">
               <input id="budgetEditId" type="hidden">
@@ -230,7 +230,7 @@
               <p class="muted budget-field-note">Budget records use only: ID, Date, Type, Category, Description, Amount and Source.</p>
             </form>
           </article>
-          <article class="admin-card">
+          <article class="admin-card budget-record-card">
             <div class="card-title"><span class="eyebrow">Budget Records</span><h2>Income and expenses</h2></div>
             <div class="summary-grid budget-summary-grid"><div class="budget-summary-card income-card"><span>Income</span><b id="budgetIncome">Rs 0.00</b></div><div class="budget-summary-card expense-card"><span>Expenses</span><b id="budgetExpense">Rs 0.00</b></div><div class="budget-summary-card balance-card"><span>Balance</span><b id="budgetBalance">Rs 0.00</b></div></div>
             <div class="table-wrap compact-table budget-table-wrap"><table><thead><tr><th>ID</th><th>Date</th><th>Type</th><th>Category</th><th>Description</th><th>Amount</th><th>Source</th><th>Actions</th></tr></thead><tbody id="budgetBody"></tbody></table></div>
