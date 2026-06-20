@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Trini-D 3D printing gallery and visual samples." />
+  <title>Gallery | Trini-D 3D Printing</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<header class="site-header" id="top">
+  <div class="container nav">
+    <a class="brand" href="index.html" aria-label="Trini-D home">
+      <img src="assets/logo.jpg" class="brand-logo" alt="Trini-D logo" />
+      <span>Trini-D <small>3D PRINTING</small></span>
+    </a>
+    <nav class="nav-links" aria-label="Primary navigation"><a href="index.html" class="nav-link" data-nav>Home</a><a href="about.html" class="nav-link" data-nav>About</a><a href="services.html" class="nav-link" data-nav>Services</a><a href="gallery.html" class="nav-link" data-nav>Gallery</a><a href="quotation.html" class="nav-link" data-nav>Quotation</a><a href="contact.html" class="nav-link" data-nav>Contact Us</a></nav>
+    <div class="nav-cta">
+      <a class="btn ghost hide-sm" href="tel:0719335411">Call</a>
+      <button class="theme-toggle" id="themeToggle" type="button" aria-label="Switch to dark mode" aria-pressed="false">
+        <span class="theme-icon" aria-hidden="true">🌙</span>
+        <span class="theme-text">Dark</span>
+      </button>
+      <a class="btn primary" href="quotation.html">Get Quote</a>
+      <button class="menu-btn" id="menuBtn" type="button" aria-label="Open menu" aria-expanded="false">Menu</button>
+    </div>
+  </div>
+  <div class="mobile-menu" id="mobileMenu"><a href="index.html" data-nav>Home</a><a href="about.html" data-nav>About</a><a href="services.html" data-nav>Services</a><a href="gallery.html" data-nav>Gallery</a><a href="quotation.html" data-nav>Quotation</a><a href="contact.html" data-nav>Contact Us</a></div>
+</header>
+
+<main>
+  <section class="page-hero"><div class="container"><div class="breadcrumb"><a href="index.html">Home</a> / Gallery</div><h1>Project <span class="gold">Gallery</span></h1><p class="lead">A visual style preview for the Trini-D brand and 3D printing service. Replace these sample images with real customer prints later.</p></div></section>
+  <section class="section"><div class="container"><div class="gallery-grid reveal-up"><article class="gallery-card big"><img src="assets/printer-lion.png" alt="3D printer with gold lion"><div class="gallery-caption"><h3>Premium Print Setup</h3><p>High-end print visuals with a black and gold brand style.</p></div></article><article class="gallery-card"><img src="assets/banner-dark.png" alt="3D printing banner"><div class="gallery-caption"><h3>WhatsApp Banner</h3><p>Black and gold tech-inspired layout.</p></div></article><article class="gallery-card"><img src="assets/flyer-light.png" alt="3D print service poster"><div class="gallery-caption"><h3>Social Poster</h3><p>Ready for Instagram / WhatsApp status.</p></div></article><article class="gallery-card"><img src="assets/logo.jpg" alt="Trini-D logo"><div class="gallery-caption"><h3>Trini-D Logo</h3><p>Gold, gray, black, and white identity.</p></div></article><article class="gallery-card"><img src="assets/banner-dark.png" alt="3D printing hero"><div class="gallery-caption"><h3>Hero Visual</h3><p>Use real product photos here later.</p></div></article></div></div></section>
+  <section class="section alt-section"><div class="container"><div class="quote-strip reveal-up"><div><span class="eyebrow">Show Your Work</span><h2>Want your print featured here?</h2><p class="muted">After printing, you can add real project photos to this gallery.</p></div><a href="quotation.html" class="btn primary">Start a Print Job</a></div></div></section>
+</main>
+<a class="floating-whatsapp" href="https://wa.me/94751656777" target="_blank" rel="noopener" aria-label="Chat on WhatsApp">
+  <span>WhatsApp</span>
+</a>
+<footer class="footer">
+  <div class="container footer-grid">
+    <div>
+      <a class="brand" href="index.html"><img src="assets/logo.jpg" class="brand-logo" alt="Trini-D logo"><span>Trini-D <small>3D PRINTING</small></span></a>
+      <p class="muted footer-text">Premium 3D printing for ready-made models. Send your .stl or .3mf file and get the price before printing.</p>
+      <div class="social-pills"><span>.STL</span><span>.3MF</span><span>WhatsApp First</span></div>
+    </div>
+    <div>
+      <h3>Pages</h3>
+      <a href="index.html">Home</a><a href="about.html">About</a><a href="services.html">Services</a><a href="gallery.html">Gallery</a><a href="quotation.html">Quotation</a><a href="contact.html">Contact Us</a>
+    </div>
+    <div>
+      <h3>Services</h3>
+      <a href="services.html#rapid">Rapid Prototyping</a>
+      <a href="services.html#parts">Functional Parts</a>
+      <a href="services.html#models">Display Models</a>
+      <a href="services.html#materials">PLA / PETG / TPU / ABS</a>
+    </div>
+    <div>
+      <h3>Contact</h3>
+      <a href="https://wa.me/94751656777" target="_blank" rel="noopener">WhatsApp: +94 75 16 56 777</a>
+      <a href="tel:0719335411">Anushka: 071 93 35 411</a>
+      <a href="tel:0785524561">Chamikara: 078 552 4561</a>
+      <a href="quotation.html" class="footer-quote">Request Quotation</a>
+    </div>
+  </div>
+  <div class="container footer-bottom">
+    <span>© <span id="year"></span> Trini-D 3D Printing. All rights reserved.</span>
+    <span>Three Dimensions, Endless Possibilities.</span>
+  </div>
+</footer>
+<script src="script.js"></script>
+</body>
+</html>

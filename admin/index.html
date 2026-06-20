@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="dark">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="robots" content="noindex,nofollow" />
+  <title>Admin Dashboard | Trini-D 3D Printing</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="../styles.css" />
+  <link rel="stylesheet" href="admin.css" />
+</head>
+<body class="admin-body">
+  <div class="admin-login" id="adminLogin">
+    <div class="login-card">
+      <img src="../assets/logo.jpg" alt="Trini-D logo" />
+      <span class="eyebrow">Admin Only</span>
+      <h1>Trini-D Control Panel</h1>
+      <p class="muted">Sign in with your Firebase admin email and password to open the cloud database tools.</p>
+      <form id="loginForm" class="login-form">
+        <label class="field">
+          <span>Admin Email</span>
+          <input type="email" id="adminEmail" placeholder="admin email" autocomplete="username" required />
+        </label>
+        <label class="field">
+          <span>Password</span>
+          <input type="password" id="adminPassword" placeholder="Firebase password" autocomplete="current-password" required />
+        </label>
+        <button class="btn primary" type="submit">Sign in to Admin Panel</button>
+      </form>
+      <p class="login-note">Use the Firebase Authentication user you created. The old PIN login has been replaced by cloud login.</p>
+    </div>
+  </div>
+
+  <div class="admin-shell" id="adminShell" hidden>
+    <aside class="admin-sidebar">
+      <a class="brand admin-brand" href="../index.html" aria-label="Trini-D public site">
+        <img src="../assets/logo.jpg" class="brand-logo" alt="Trini-D logo" />
+        <span>Trini-D <small>ADMIN</small></span>
+      </a>
+      <nav class="admin-nav" aria-label="Admin navigation">
+        <button class="admin-nav-link active" data-section="dashboard">Dashboard</button>
+        <button class="admin-nav-link" data-section="calculator">Price Calculator</button>
+        <button class="admin-nav-link" data-section="quotation">Quotations</button>
+        <button class="admin-nav-link" data-section="bill">Bills / Invoices</button>
+        <button class="admin-nav-link" data-section="database">Database</button>
+        <button class="admin-nav-link" data-section="budget">Budget</button>
+        <button class="admin-nav-link" data-section="settings">Export / Settings</button>
+      </nav>
+      <div class="admin-side-card">
+        <span class="eyebrow">Subdomain Ready</span>
+        <p>Deploy this <b>admin</b> folder as <b>admin.yourdomain.com</b>.</p>
+      </div>
+      <button class="btn ghost admin-logout" id="logoutBtn" type="button">Lock Panel</button>
+    </aside>
+
+    <main class="admin-main">
+      <header class="admin-topbar">
+        <div>
+          <span class="eyebrow">Trini-D Business Tools</span>
+          <h1>Admin Dashboard</h1>
+        </div>
+        <div class="admin-top-actions">
+          <span class="cloud-status" id="cloudStatus">Cloud: connecting...</span>
+          <button class="btn ghost" id="saveSnapshotBtn" type="button">Export JSON</button>
+          <button class="btn primary" data-section-jump="calculator" type="button">New Price</button>
+        </div>
+      </header>
+
+      <section class="admin-section active" id="section-dashboard">
+        <div class="stat-grid dashboard-only-cards">
+          <article class="stat-card"><span>Total Items</span><b id="statItems">0</b><small>Calculator saved records</small></article>
+          <article class="stat-card"><span>Total Orders</span><b id="statOrders">0</b><small>Bills / invoice records</small></article>
+          <article class="stat-card"><span>Total Profit</span><b id="statProfit">Rs 0.00</b><small>Orders price minus cost</small></article>
+          <article class="stat-card"><span>Budget Balance</span><b id="statBudgetBalance">Rs 0.00</b><small>Budget income minus expenses</small></article>
+        </div>
+        <div class="admin-grid two dashboard-workflow-grid">
+          <article class="admin-card">
+            <div class="card-title"><span class="eyebrow">Workflow</span><h2>From price calculation to invoice.</h2></div>
+            <div class="process mini-process">
+              <article class="step-card" data-step="01"><h3>1. Calculate</h3><p class="muted">Use print time, material, power, cost and margin to calculate the selling price.</p></article>
+              <article class="step-card" data-step="02"><h3>2. Save Item</h3><p class="muted">Save successful or failed item details into the database.</p></article>
+              <article class="step-card" data-step="03"><h3>3. Quote / Bill</h3><p class="muted">Generate a quotation or invoice and save order totals.</p></article>
+              <article class="step-card" data-step="04"><h3>4. Sync Budget</h3><p class="muted">Send order income and print cost to budget records.</p></article>
+            </div>
+          </article>
+          <article class="admin-card">
+            <div class="card-title"><span class="eyebrow">Recent Activity</span><h2>Latest database records.</h2></div>
+            <div id="recentActivity" class="activity-list"></div>
+          </article>
+        </div>
+      </section>
+
+      <section class="admin-section" id="section-calculator">
+        <div class="admin-card">
+          <div class="card-title"><span class="eyebrow">Calculator</span><h2>3D Precision Pricing</h2><p class="muted">Same desktop pricing logic converted to web form.</p></div>
+          <form id="calculatorForm" class="admin-form">
+            <h3 class="form-subtitle">Operational Base</h3>
+            <div class="form-grid admin-form-grid four">
+              <label class="field"><span>Filament Price Rs/kg</span><input id="P" type="number" step="0.01" required></label>
+              <label class="field"><span>Filament Density g/cm³</span><input id="rho" type="number" step="0.001" required></label>
+              <label class="field"><span>Filament Diameter mm</span><input id="d_mm" type="number" step="0.01" required></label>
+              <label class="field"><span>Power Consumption W</span><input id="W" type="number" step="0.01" required></label>
+              <label class="field"><span>Electricity Rs/kWh</span><input id="R" type="number" step="0.01" required></label>
+              <label class="field"><span>Printer Cost Rs</span><input id="Cp" type="number" step="0.01" required></label>
+              <label class="field"><span>Printer Lifetime Hours</span><input id="H" type="number" step="0.01" required></label>
+              <label class="field"><span>Failure Risk 0-1</span><input id="F" type="number" step="0.001" min="0" max="0.99" required></label>
+              <label class="field"><span>UPS Cost Rs optional</span><input id="Cups" type="number" step="0.01"></label>
+              <label class="field"><span>UPS Lifetime Hours</span><input id="Hups" type="number" step="0.01"></label>
+            </div>
+
+            <h3 class="form-subtitle">Job Specifics</h3>
+            <div class="form-grid admin-form-grid four">
+              <label class="field"><span>Customer optional</span><input id="calcCustomer" type="text" placeholder="Customer name"></label>
+              <label class="field"><span>Model Name</span><input id="calcModel" type="text" placeholder="Model / item name"></label>
+              <label class="field"><span>Days</span><input id="calcDays" type="number" step="1" min="0" value="0"></label>
+              <label class="field"><span>Hours</span><input id="calcHours" type="number" step="1" min="0" value="0"></label>
+              <label class="field"><span>Minutes</span><input id="calcMinutes" type="number" step="1" min="0" value="0"></label>
+              <label class="field"><span>Input By</span><select id="materialMode"><option value="Length">Length (Meters)</option><option value="Weight">Weight (Grams)</option></select></label>
+              <label class="field" id="lengthField"><span>Filament Length m</span><input id="lengthM" type="number" step="0.01"></label>
+              <label class="field" id="weightField"><span>Filament Weight g</span><input id="weightG" type="number" step="0.01"></label>
+              <label class="field"><span>Profit Margin %</span><input id="margin" type="number" step="0.01" value="0"></label>
+              <label class="field"><span>Item Status</span><select id="calcStatus"><option>Success</option><option>Failed</option></select></label>
+            </div>
+            <div class="admin-actions">
+              <button class="btn primary" type="submit">Calculate Price</button>
+              <button class="btn ghost" id="resetCalcBtn" type="button">Reset Job</button>
+              <button class="btn ghost" id="saveCalcBtn" type="button">Add to Item Details</button>
+              <button class="btn ghost" id="addCalcToBillBtn" type="button">Use in Bill</button>
+              <button class="btn ghost" id="addCalcToQuoteBtn" type="button">Use in Quotation</button>
+            </div>
+          </form>
+          <div class="metric-grid" id="calcResults">
+            <div><span>Length</span><b id="outLength">0.00 m</b></div>
+            <div><span>Weight</span><b id="outWeight">0.00 g</b></div>
+            <div><span>Electricity</span><b id="outElectricity">Rs 0.00</b></div>
+            <div><span>Filament</span><b id="outFilament">Rs 0.00</b></div>
+            <div><span>Machine Dep.</span><b id="outDepreciation">Rs 0.00</b></div>
+            <div><span>Total Cost</span><b id="outTotalCost">Rs 0.00</b></div>
+            <div class="final"><span>Final Price</span><b id="outFinalPrice">Rs 0.00</b></div>
+          </div>
+        </div>
+      </section>
+
+      <section class="admin-section" id="section-quotation">
+        <div class="admin-card">
+          <div class="card-title"><span class="eyebrow">Quotation</span><h2>Generate Customer Quotation</h2></div>
+          <form id="quoteAdminForm" class="admin-form">
+            <div class="form-grid admin-form-grid three">
+              <label class="field"><span>Customer Name</span><input id="quoteCustomer" type="text" required></label>
+              <label class="field"><span>Quotation No</span><input id="quoteNo" type="text" readonly></label>
+              <label class="field"><span>Date</span><input id="quoteDate" type="date"></label>
+            </div>
+            <div class="table-wrap line-editor"><table><thead><tr><th>Model</th><th>Qty</th><th>Unit Price</th><th>Layer</th><th>Walls</th><th>Infill</th><th>Weight</th><th>Print Time</th><th></th></tr></thead><tbody id="quoteItemsBody"></tbody></table></div>
+            <div class="admin-actions"><button class="btn ghost" id="addQuoteRowBtn" type="button">+ Add Item</button><button class="btn ghost" id="addCalcQuoteBtn" type="button">Add Calculator Result</button></div>
+            <label class="field"><span>Notes optional</span><textarea id="quoteNotes" rows="3" placeholder="Validity, delivery, conditions..."></textarea></label>
+            <div class="summary-box"><span>Quotation Total</span><b id="quoteGrandTotal">Rs 0.00</b></div>
+            <button class="btn primary" type="submit">Generate Quotation PDF / Print</button>
+          </form>
+        </div>
+      </section>
+
+      <section class="admin-section" id="section-bill">
+        <div class="admin-card">
+          <div class="card-title"><span class="eyebrow">Bill Generator</span><h2>Generate Invoice / Customer Bill</h2></div>
+          <form id="billAdminForm" class="admin-form">
+            <div class="form-grid admin-form-grid four">
+              <label class="field"><span>Customer Name</span><input id="billCustomer" type="text" required></label>
+              <label class="field"><span>Invoice No</span><input id="invoiceNo" type="text" readonly></label>
+              <label class="field"><span>Date</span><input id="billDate" type="date"></label>
+              <label class="field"><span>Paid Status</span><select id="billPaidStatus"><option value="Unpaid">Unpaid</option><option value="Paid">Paid</option><option value="Advance">Advance</option></select></label>
+              <label class="field"><span>Paid Method</span><input id="billPaidMethod" type="text" placeholder="Cash / Bank / Online"></label>
+              <label class="field"><span>Advance Paid Rs</span><input id="billAdvance" type="number" step="0.01" value="0"></label>
+            </div>
+            <div class="table-wrap line-editor"><table><thead><tr><th>Model</th><th>Qty</th><th>Unit Price</th><th>Discount</th><th>Cost Rs</th><th>Layer</th><th>Walls</th><th>Infill</th><th></th></tr></thead><tbody id="billItemsBody"></tbody></table></div>
+            <div class="admin-actions"><button class="btn ghost" id="addBillRowBtn" type="button">+ Add Item</button><button class="btn ghost" id="addCalcBillBtn" type="button">Add Calculator Result</button></div>
+            <label class="field"><span>Notes optional</span><textarea id="billNotes" rows="3" placeholder="Payment note, pickup note..."></textarea></label>
+            <div class="summary-grid">
+              <div><span>Subtotal</span><b id="billSubtotal">Rs 0.00</b></div>
+              <div><span>Discount</span><b id="billDiscount">Rs 0.00</b></div>
+              <div><span>Total</span><b id="billGrandTotal">Rs 0.00</b></div>
+              <div><span>Balance Due</span><b id="billBalance">Rs 0.00</b></div>
+            </div>
+            <button class="btn primary" type="submit">Generate Invoice PDF / Print</button>
+          </form>
+        </div>
+      </section>
+
+      <section class="admin-section" id="section-database">
+        <div class="admin-card">
+          <div class="card-title"><span class="eyebrow">Database Watch</span><h2>Item Details, Orders, Bills / Invoices, Quotations and Custom Tables</h2></div>
+          <div id="databaseSummaryCards" class="database-summary-cards" aria-live="polite"></div>
+          <div class="database-toolbar">
+            <input id="dbSearch" type="search" placeholder="Search database..." />
+            <button class="btn ghost db-tab active" data-db-table="items" type="button">Item Details</button>
+            <button class="btn ghost db-tab" data-db-table="orders" type="button">Orders</button>
+            <button class="btn ghost db-tab" data-db-table="invoices" type="button">Bills / Invoices</button>
+            <button class="btn ghost db-tab" data-db-table="quotes" type="button">Quotations</button>
+            <button class="btn ghost db-tab" data-db-table="custom" type="button">Custom</button>
+            <button class="btn ghost" id="exportCsvBtn" type="button">Export CSV</button>
+          </div>
+          <div class="admin-actions custom-actions">
+            <input id="customGroupName" type="text" placeholder="New custom group name">
+            <button class="btn ghost" id="createCustomGroupBtn" type="button">+ Custom Group</button>
+            <select id="customGroupSelect"></select>
+            <button class="btn ghost" id="addSelectedToCustomBtn" type="button">Add Selected Items to Custom</button>
+            <button class="btn primary" id="addSelectedToOrdersBtn" type="button">Add Selected Items to Orders</button>
+            <button class="btn ghost" id="useSelectedInBillBtn" type="button">Use Selected in Bill</button>
+          </div>
+          <div class="table-wrap"><table id="databaseTable"><thead id="databaseHead"></thead><tbody id="databaseBody"></tbody></table></div>
+        </div>
+      </section>
+
+      <section class="admin-section" id="section-budget">
+        <div class="admin-grid two">
+          <article class="admin-card">
+            <div class="card-title"><span class="eyebrow">Budget</span><h2>Add Income / Expense</h2></div>
+            <form id="budgetForm" class="admin-form">
+              <div class="form-grid admin-form-grid two">
+                <label class="field"><span>Date</span><input id="budgetDate" type="date"></label>
+                <label class="field"><span>Type</span><select id="budgetType"><option>Expense</option><option>Income</option></select></label>
+                <label class="field"><span>Category</span><input id="budgetCategory" type="text" placeholder="Filament / Order Payment"></label>
+                <label class="field"><span>Amount Rs</span><input id="budgetAmount" type="number" step="0.01" required></label>
+                <label class="field"><span>Payment Method</span><input id="budgetMethod" type="text" placeholder="Cash / Bank"></label>
+                <label class="field"><span>Reference</span><input id="budgetReference" type="text" placeholder="Invoice / note"></label>
+                <label class="field full"><span>Description</span><input id="budgetDescription" type="text" placeholder="Short description"></label>
+                <label class="field full"><span>Notes</span><textarea id="budgetNotes" rows="3"></textarea></label>
+              </div>
+              <div class="admin-actions"><button class="btn primary" type="submit">Save Budget Record</button><button class="btn ghost" id="syncBudgetBtn" type="button">Sync Orders to Budget</button></div>
+            </form>
+          </article>
+          <article class="admin-card">
+            <div class="card-title"><span class="eyebrow">Budget Records</span><h2>Income and expenses</h2></div>
+            <div class="summary-grid"><div><span>Income</span><b id="budgetIncome">Rs 0.00</b></div><div><span>Expenses</span><b id="budgetExpense">Rs 0.00</b></div><div><span>Balance</span><b id="budgetBalance">Rs 0.00</b></div></div>
+            <div class="table-wrap compact-table"><table><thead><tr><th>Date</th><th>Type</th><th>Category</th><th>Amount</th><th>Source</th><th></th></tr></thead><tbody id="budgetBody"></tbody></table></div>
+          </article>
+        </div>
+      </section>
+
+      <section class="admin-section" id="section-settings">
+        <div class="admin-grid two">
+          <article class="admin-card">
+            <div class="card-title"><span class="eyebrow">Export</span><h2>Backup your admin database.</h2></div>
+            <p class="muted">This version saves the admin database to Firebase Cloud Firestore and keeps a local browser cache for backup/offline loading.</p>
+            <div class="admin-actions vertical-actions">
+              <button class="btn primary" id="exportJsonBtn" type="button">Download Full JSON Backup</button>
+              <label class="btn ghost file-import">Import JSON Backup<input id="importJsonInput" type="file" accept="application/json"></label>
+              <label class="btn ghost file-import">Import Desktop SQLite DB<input id="importDesktopDbInput" type="file" accept=".sqlite,.sqlite3,.db,application/vnd.sqlite3,application/octet-stream"></label>
+              <button class="btn ghost danger" id="clearDbBtn" type="button">Clear Cloud Admin Database</button>
+            </div>
+            <p class="muted import-note">Desktop DB import reads <code>trini_d_print_database.sqlite3</code> exported from the desktop software. After import, records are uploaded to Firebase cloud automatically. Direct SQLite import needs internet once for the browser SQLite reader. Offline fallback: use <code>tools/convert_desktop_db_to_admin_json.py</code>, then import the generated JSON here.</p>
+          </article>
+          <article class="admin-card">
+            <div class="card-title"><span class="eyebrow">Admin Subdomain</span><h2>Deployment note.</h2></div>
+            <p class="muted">This admin panel is published inside <code>/admin/</code> and now uses Firebase Authentication + Cloud Firestore for realtime cloud database sync.</p>
+            <div class="check-list"><div>Public website remains in the main folder.</div><div>Admin dashboard is inside <code>/admin/</code>.</div><div>Use <code>README_ADMIN_SETUP.txt</code> for setup instructions.</div></div>
+          </article>
+        </div>
+      </section>
+    </main>
+  </div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/sql-wasm.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
+  <script src="firebase-config.js"></script>
+  <script src="admin.js"></script>
+</body>
+</html>
