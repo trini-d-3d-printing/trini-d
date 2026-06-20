@@ -753,6 +753,8 @@ function initDatabase() {
       const itemId = e.target.value;
       if (e.target.checked) selectedItemIds.add(itemId); else selectedItemIds.delete(itemId);
     }
+    const paidSelect = e.target.closest('[data-order-paid]');
+    if (paidSelect) updateOrderPaidStatus(paidSelect.dataset.orderPaid, paidSelect.value);
   });
   $('#databaseBody').addEventListener('click', e => {
     const orderBtn = e.target.closest('[data-item-to-order]');
@@ -889,6 +891,19 @@ function useSelectedItemsInBill() {
   toast('Selected items added to Bill form');
 }
 
+function updateOrderPaidStatus(orderId, paidStatus) {
+  const order = db.orders.find(r => r.id === orderId);
+  if (!order) return;
+  order.paidStatus = paidStatus === 'Paid' ? 'Paid' : 'Unpaid';
+
+  // Keep matching invoice status updated when this order was generated from a bill/invoice.
+  const invoice = (db.invoices || []).find(r => r.id === orderId || r.orderId === order.orderId || r.invoiceNo === order.orderId);
+  if (invoice) invoice.paidStatus = order.paidStatus;
+
+  saveDb();
+  toast(`Order marked as ${order.paidStatus}`);
+}
+
 function renderDatabaseTable() {
   const q = $('#dbSearch').value.trim().toLowerCase();
   const include = row => JSON.stringify(row).toLowerCase().includes(q);
@@ -902,8 +917,11 @@ function renderDatabaseTable() {
   }
   if (activeDbTable === 'orders') {
     rows = db.orders.filter(include);
-    headers = '<tr><th>Date</th><th>Order ID</th><th>Customer</th><th>Model</th><th>Paid</th><th>Advance</th><th>Cost</th><th>Price</th><th>Profit</th><th></th></tr>';
-    body = rows.map(r => `<tr><td>${safe(r.datePrinted)}</td><td>${safe(r.orderId)}</td><td>${safe(r.customer)}</td><td>${safe(r.model)}</td><td><span class="pill-status ${String(r.paidStatus).toLowerCase()}">${safe(r.paidStatus)}</span></td><td>${money(r.advancePayment)}</td><td>${money(r.totalCost)}</td><td>${money(r.price)}</td><td>${money(r.profit)}</td><td><button class="small-btn" data-delete="${r.id}" data-kind="order">Delete</button></td></tr>`).join('');
+    headers = '<tr><th>Date</th><th>Order ID</th><th>Customer</th><th>Model</th><th>Paid Status</th><th>Advance</th><th>Cost</th><th>Price</th><th>Profit</th><th></th></tr>';
+    body = rows.map(r => {
+      const paidStatus = normalizePaidStatus(r.paidStatus) || 'Unpaid';
+      return `<tr><td>${safe(r.datePrinted)}</td><td>${safe(r.orderId)}</td><td>${safe(r.customer)}</td><td>${safe(r.model)}</td><td><select class="order-paid-select ${paidStatus.toLowerCase()}" data-order-paid="${r.id}"><option value="Paid" ${paidStatus === 'Paid' ? 'selected' : ''}>Paid</option><option value="Unpaid" ${paidStatus === 'Unpaid' ? 'selected' : ''}>Unpaid</option></select></td><td>${money(r.advancePayment)}</td><td>${money(r.totalCost)}</td><td>${money(r.price)}</td><td>${money(r.profit)}</td><td><button class="small-btn" data-delete="${r.id}" data-kind="order">Delete</button></td></tr>`;
+    }).join('');
   }
   if (activeDbTable === 'invoices') {
     rows = (db.invoices || []).filter(include);
@@ -989,9 +1007,16 @@ function uniqueCustomerCount(rows) {
   return new Set(rows.map(r => String(r.customer || '').trim().toLowerCase()).filter(Boolean)).size;
 }
 
+function normalizePaidStatus(status) {
+  const value = String(status || '').trim().toLowerCase();
+  if (['paid', 'y', 'yes', 'true', '1'].includes(value)) return 'Paid';
+  if (['unpaid', 'n', 'no', 'false', '0'].includes(value)) return 'Unpaid';
+  return '';
+}
+
 function orderUnpaidAmount(order) {
-  const status = String(order.paidStatus || '').toLowerCase();
-  if (status === 'paid') return 0;
+  const status = normalizePaidStatus(order.paidStatus);
+  if (status !== 'Unpaid') return 0;
   return Math.max(0, num(order.price) - num(order.advancePayment));
 }
 

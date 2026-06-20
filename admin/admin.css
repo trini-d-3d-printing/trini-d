@@ -63,3 +63,5 @@ body.firebase-signed-out .admin-shell {
 .cloud-status[data-state='syncing']::before { background: #fbbf24; box-shadow: 0 0 18px rgba(251,191,36,.75); }
 .cloud-status[data-state='error']::before { background: #ef4444; box-shadow: 0 0 18px rgba(239,68,68,.75); }
 @media (max-width: 760px) { .cloud-status { width: 100%; justify-content: center; } }
+
+.order-paid-select{background:rgba(255,255,255,.04);border:1px solid var(--admin-line-soft);color:var(--admin-text);border-radius:999px;padding:6px 10px;font-weight:900;min-width:92px;cursor:pointer}.order-paid-select.paid{color:var(--admin-green);background:rgba(74,222,128,.1)}.order-paid-select.unpaid{color:var(--admin-red);background:rgba(255,102,102,.09)}.order-paid-select option{color:#111}
