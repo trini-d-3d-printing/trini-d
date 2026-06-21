@@ -462,7 +462,8 @@ function minutesLabel(minutes) {
 }
 
 function lineInput(value, cls = '', type = 'text') {
-  return `<input class="${cls}" type="${type}" value="${safe(value ?? '')}">`;
+  const stepAttr = type === 'number' ? ' step="any" inputmode="decimal"' : '';
+  return `<input class="${cls}" type="${type}"${stepAttr} value="${safe(value ?? '')}">`;
 }
 
 function addBillRow(data = {}) {
@@ -473,7 +474,7 @@ function addBillRow(data = {}) {
     <td>${lineInput(data.unit || '', 'unit-input', 'number')}</td>
     <td>${lineInput(data.discount || 0, 'discount-input', 'number')}</td>
     <td>${lineInput(data.cost || 0, 'cost-input', 'number')}</td>
-    <td>${lineInput(data.layer || '', 'layer-input')}</td>
+    <td>${lineInput(data.layer || '0.2', 'layer-input')}</td>
     <td><select class="walls-input"><option></option>${['1','2','3','4','5','6','Custom'].map(v => `<option${data.walls == v ? ' selected' : ''}>${v}</option>`).join('')}</select></td>
     <td>${lineInput(data.infill || '', 'infill-input')}</td>
     <td><button class="row-delete" type="button">×</button></td>`;
@@ -487,7 +488,7 @@ function addQuoteRow(data = {}) {
     <td>${lineInput(data.model || '', 'model-input')}</td>
     <td>${lineInput(data.qty || 1, 'qty-input', 'number')}</td>
     <td>${lineInput(data.unit || '', 'unit-input', 'number')}</td>
-    <td>${lineInput(data.layer || '', 'layer-input')}</td>
+    <td>${lineInput(data.layer || '0.2', 'layer-input')}</td>
     <td><select class="walls-input">${['1','2','3','4','5','6','Custom'].map(v => `<option${data.walls == v ? ' selected' : ''}>${v}</option>`).join('')}</select></td>
     <td>${lineInput(data.infill || '', 'infill-input')}</td>
     <td>${lineInput(data.weight || '', 'weight-input')}</td>
@@ -532,8 +533,35 @@ function billTotals(items = collectBillItems()) {
   return { subtotal, discount, total, advance, balance: Math.max(0, total - advance), cost, profit: total - cost };
 }
 
+
+function parseWeightG(value) {
+  const text = String(value || '').trim().toLowerCase();
+  if (!text) return 0;
+  const n = num(text);
+  if (!n) return 0;
+  if (text.includes('kg')) return n * 1000;
+  return n;
+}
+
+function parsePrintTimeMinutes(value) {
+  const text = String(value || '').trim().toLowerCase();
+  if (!text) return 0;
+  let total = 0;
+  const day = text.match(/([0-9.]+)\s*d/);
+  const hour = text.match(/([0-9.]+)\s*h/);
+  const min = text.match(/([0-9.]+)\s*m/);
+  if (day) total += num(day[1]) * 1440;
+  if (hour) total += num(hour[1]) * 60;
+  if (min) total += num(min[1]);
+  if (!total && /^\d+(\.\d+)?$/.test(text)) total = num(text);
+  return total;
+}
+
 function quoteTotals(items = collectQuoteItems()) {
-  return { total: items.reduce((sum, item) => sum + (item.qty * item.unitPrice), 0) };
+  const total = items.reduce((sum, item) => sum + (item.qty * item.unitPrice), 0);
+  const weightG = items.reduce((sum, item) => sum + parseWeightG(item.weight), 0);
+  const printMinutes = items.reduce((sum, item) => sum + parsePrintTimeMinutes(item.printTime), 0);
+  return { total, weightG, printMinutes };
 }
 
 function recalcBill() {
@@ -545,7 +573,12 @@ function recalcBill() {
 }
 
 function recalcQuote() {
-  $('#quoteGrandTotal').textContent = money(quoteTotals().total);
+  const totals = quoteTotals();
+  $('#quoteGrandTotal').textContent = money(totals.total);
+  const weightEl = $('#quoteTotalWeight');
+  const timeEl = $('#quoteTotalTime');
+  if (weightEl) weightEl.textContent = `${totals.weightG.toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} g`;
+  if (timeEl) timeEl.textContent = minutesLabel(totals.printMinutes);
 }
 
 function initBillQuote() {
@@ -592,7 +625,7 @@ function generateInvoice(e) {
     id: id('INVOICE'), createdAt: nowStamp(), invoiceNo: data.no, orderId: data.no, customer: data.customer,
     date: data.date, subtotal: totals.subtotal, discount: totals.discount, total: totals.total,
     advancePayment: totals.advance, balance: totals.balance, paidStatus: data.paidStatus, paidMethod: data.paidMethod,
-    totalCost: totals.cost, profit: totals.profit, items, notes: data.notes
+    totalCost: totals.cost, profit: totals.profit, items, notes: data.notes, documentData: data
   };
   // Bills / Invoices are saved only in the Bills / Invoices database.
   // They do not create Orders, Costs, Profit, Income, or Budget records.
@@ -618,11 +651,12 @@ function generateQuotation(e) {
     totals
   };
   printDocument(data);
-  db.quotes.unshift({ id: id('QUOTE'), createdAt: nowStamp(), quoteNo: data.no, customer: data.customer, date: data.date, total: totals.total, items, notes: data.notes });
+  db.quotes.unshift({ id: id('QUOTE'), createdAt: nowStamp(), quoteNo: data.no, customer: data.customer, date: data.date, total: totals.total, totalWeightG: totals.weightG, totalPrintMinutes: totals.printMinutes, items, notes: data.notes, documentData: data });
   saveDb();
   $('#quoteNo').value = docId('QT');
   toast('Quotation saved to database');
 }
+
 
 function printDocument(data) {
   const isInvoice = data.type === 'INVOICE';
@@ -637,54 +671,73 @@ function printDocument(data) {
   const formatMoneyDot = v => `Rs. ${formatNumber(v)}`;
   const normalizedLayer = item => item.layer ? `${safe(item.layer)}${String(item.layer).toLowerCase().includes('mm') ? '' : ' mm'}` : '';
   const normalizedInfill = item => item.infill ? `${safe(item.infill)}${String(item.infill).includes('%') ? '' : '%'}` : '';
-  const preparedItems = data.items.map(item => ({
+  const preparedItems = (data.items || []).map(item => ({
     ...item,
     qty: Number(item.qty || 1) || 1,
-    unitPrice: Number(item.unitPrice || 0) || 0,
+    unitPrice: Number(item.unitPrice ?? item.unit ?? 0) || 0,
     discount: Number(item.discount || 0) || 0,
     layer: normalizedLayer(item),
     walls: safe(item.walls || ''),
-    infill: normalizedInfill(item)
+    infill: normalizedInfill(item),
+    weight: item.weight || '',
+    printTime: item.printTime || item.print_time || ''
   }));
   const hasInvoiceDiscount = isInvoice && preparedItems.some(item => item.discount > 0);
 
-  const quoteHeaders = `
-    <div class="th c-model">MODEL / DESCRIPTION</div><div class="th c-qty">Quantity</div><div class="th c-unit">UNIT PRICE</div><div class="th c-layer">LAYER</div><div class="th c-walls">WALLS</div><div class="th c-infill">INFILL</div><div class="th c-total">TOTAL</div>`;
+  const quoteHeaders = `<div class="th c-model">MODEL / DESCRIPTION</div><div class="th c-qty">Quantity</div><div class="th c-unit">UNIT PRICE</div><div class="th c-layer">LAYER</div><div class="th c-walls">WALLS</div><div class="th c-infill">INFILL</div><div class="th c-total">TOTAL</div>`;
   const invoiceHeaders = hasInvoiceDiscount
     ? `<div class="th i-model-disc">MODEL / DESCRIPTION</div><div class="th i-qty-disc">Quantity</div><div class="th i-unit-disc">UNIT PRICE</div><div class="th i-discount-disc">DISCOUNT</div><div class="th i-total-disc">TOTAL</div>`
     : `<div class="th i-model">MODEL / DESCRIPTION</div><div class="th i-qty">Quantity</div><div class="th i-unit">UNIT PRICE</div><div class="th i-total">TOTAL</div>`;
 
-  let rowTopPt = 0;
-  const rows = preparedItems.map((item, index) => {
+  function rowInfo(item, index) {
     const lineTotal = isInvoice ? Math.max(0, (item.qty * item.unitPrice) - item.discount) : (item.qty * item.unitPrice);
     const rowClass = index % 2 === 0 ? 'row-light' : 'row-white';
     if (!isInvoice) {
       const weight = item.weight || '';
-      const printTime = item.printTime || item.print_time || '';
+      const printTime = item.printTime || '';
       const extra = weight || printTime ? 16 : 0;
-      const top = rowTopPt;
-      rowTopPt += 22 + extra;
-      const sub = weight || printTime ? `<div class="quote-sub" style="top:22pt">${weight ? `⚖ ${safe(weight)}` : ''}${weight && printTime ? '   |   ' : ''}${printTime ? `⏱ ${safe(printTime)}` : ''}</div>` : '';
-      return `<div class="doc-row quote-row ${rowClass}" style="top:${top}pt;height:${22 + extra}pt"><div class="td q-model">${safe(item.model).slice(0, 30)}</div><div class="td q-qty">${item.qty}</div><div class="td q-unit">${formatNumber(item.unitPrice)}</div><div class="td q-layer">${item.layer}</div><div class="td q-walls">${item.walls}</div><div class="td q-infill">${item.infill}</div><div class="td q-total">${formatMoneyDot(lineTotal)}</div>${sub}</div>`;
+      return {
+        height: 22 + extra,
+        html: top => {
+          const sub = weight || printTime ? `<div class="quote-sub" style="top:22pt">${weight ? `⚖ ${safe(weight)}` : ''}${weight && printTime ? '   |   ' : ''}${printTime ? `⏱ ${safe(printTime)}` : ''}</div>` : '';
+          return `<div class="doc-row quote-row ${rowClass}" style="top:${top}pt;height:${22 + extra}pt"><div class="td q-model">${safe(item.model).slice(0, 30)}</div><div class="td q-qty">${item.qty}</div><div class="td q-unit">${formatNumber(item.unitPrice)}</div><div class="td q-layer">${item.layer}</div><div class="td q-walls">${item.walls}</div><div class="td q-infill">${item.infill}</div><div class="td q-total">${formatMoneyDot(lineTotal)}</div>${sub}</div>`;
+        }
+      };
     }
     const hasSpecs = item.layer || item.walls || item.infill;
-    const top = rowTopPt;
-    rowTopPt += 22 + (hasSpecs ? 14 : 0);
+    const rowHeight = 22 + (hasSpecs ? 14 : 0);
     const specParts = [];
     if (item.layer) specParts.push(`Layer: ${item.layer}`);
     if (item.walls) specParts.push(`Walls: ${item.walls}`);
     if (item.infill) specParts.push(`Infill: ${item.infill}`);
-    const specs = specParts.length ? `<span class="spec-tag">${safe(specParts.join('   ·   '))}</span>` : '';
-    return hasInvoiceDiscount
-      ? `<div class="doc-row inv-row ${rowClass}" style="top:${top}pt;height:${22 + (hasSpecs ? 14 : 0)}pt"><div class="td id-model-disc">${safe(item.model).slice(0, 44)}</div><div class="td id-qty-disc">${item.qty}</div><div class="td id-unit-disc">${formatMoneyDot(item.unitPrice)}</div><div class="td id-discount-disc">${item.discount > 0 ? `- ${formatMoneyDot(item.discount)}` : '-'}</div><div class="td id-total-disc">${formatMoneyDot(lineTotal)}</div>${specs ? `<div class="spec-line">${specs}</div>` : ''}</div>`
-      : `<div class="doc-row inv-row ${rowClass}" style="top:${top}pt;height:${22 + (hasSpecs ? 14 : 0)}pt"><div class="td i-model">${safe(item.model).slice(0, 44)}</div><div class="td i-qty">${item.qty}</div><div class="td i-unit">${formatMoneyDot(item.unitPrice)}</div><div class="td i-total">${formatMoneyDot(lineTotal)}</div>${specs ? `<div class="spec-line">${specs}</div>` : ''}</div>`;
-  }).join('');
-  const tableHeightPt = 26 + rowTopPt;
+    return {
+      height: rowHeight,
+      html: top => {
+        const specs = specParts.length ? `<span class="spec-tag">${safe(specParts.join('   ·   '))}</span>` : '';
+        return hasInvoiceDiscount
+          ? `<div class="doc-row inv-row ${rowClass}" style="top:${top}pt;height:${rowHeight}pt"><div class="td id-model-disc">${safe(item.model).slice(0, 44)}</div><div class="td id-qty-disc">${item.qty}</div><div class="td id-unit-disc">${formatMoneyDot(item.unitPrice)}</div><div class="td id-discount-disc">${item.discount > 0 ? `- ${formatMoneyDot(item.discount)}` : '-'}</div><div class="td id-total-disc">${formatMoneyDot(lineTotal)}</div>${specs ? `<div class="spec-line">${specs}</div>` : ''}</div>`
+          : `<div class="doc-row inv-row ${rowClass}" style="top:${top}pt;height:${rowHeight}pt"><div class="td i-model">${safe(item.model).slice(0, 44)}</div><div class="td i-qty">${item.qty}</div><div class="td i-unit">${formatMoneyDot(item.unitPrice)}</div><div class="td i-total">${formatMoneyDot(lineTotal)}</div>${specs ? `<div class="spec-line">${specs}</div>` : ''}</div>`;
+      }
+    };
+  }
+
+  const rowInfos = preparedItems.map(rowInfo);
+  const chunks = [];
+  let current = [], height = 0;
+  const maxRowsHeight = 410;
+  rowInfos.forEach(info => {
+    if (current.length && height + info.height > maxRowsHeight) {
+      chunks.push({ rows: current, height });
+      current = [];
+      height = 0;
+    }
+    current.push(info);
+    height += info.height;
+  });
+  chunks.push({ rows: current, height });
 
   const totalsHtml = (() => {
-    if (!isInvoice) {
-      return `<div class="total-quote"><span>TOTAL QUOTE</span><b>${formatMoneyDot(data.totals.total)}</b></div>`;
-    }
+    if (!isInvoice) return `<div class="total-quote"><span>${totalLabel}</span><b>${formatMoneyDot(data.totals.total)}</b></div>`;
     const parts = [];
     if (data.totals.discount > 0) {
       parts.push(`<div class="total-mini"><span>Subtotal</span><b>${formatMoneyDot(data.totals.subtotal)}</b></div>`);
@@ -697,41 +750,26 @@ function printDocument(data) {
     }
     return parts.join('');
   })();
-
   const notesHtml = data.notes ? `<section class="notes"><b>NOTES</b>${safe(data.notes).split('\n').map(line => `<span>${line}</span>`).join('')}</section>` : '';
+  const finalNeedsOwnPage = chunks.length && chunks[chunks.length - 1].height > (data.notes ? 280 : 335);
+  if (finalNeedsOwnPage) chunks.push({ rows: [], height: 0 });
+  const pageCount = Math.max(1, chunks.length);
 
+  function renderPage(chunk, pageIndex) {
+    let top = 0;
+    const rowsHtml = chunk.rows.map(info => { const html = info.html(top); top += info.height; return html; }).join('');
+    const tableHeightPt = chunk.rows.length ? 26 + top : 0;
+    const tableHtml = chunk.rows.length ? `<section class="table-wrap" style="height:${tableHeightPt}pt"><div class="table-head">${isInvoice ? invoiceHeaders : quoteHeaders}</div><div class="rows" style="position:absolute;left:0;top:26pt;width:100%;height:${top}pt">${rowsHtml}</div></section>` : '';
+    const isLast = pageIndex === pageCount - 1;
+    const totalsTop = chunk.rows.length ? Math.min(650, 194 + tableHeightPt + 12) : 218;
+    return `<div class="page"><header class="header"><img class="logo" src="../assets/logo.png" alt="Trini-D logo"><img class="brand-name" src="../assets/brand_name.png" alt="TRINI-D 3D Printing"><div class="header-motto">THREE&nbsp; DIMENTIONS&nbsp;&nbsp; - &nbsp;&nbsp;<span class="gold">ENDLESS</span>&nbsp; POSSIBILITIES</div><div class="doc-title">${docWord}</div><div class="doc-id-top"># ${safe(data.no)}</div></header><section class="panel"></section><div class="label customer-label">${partyLabel}</div><div class="customer-name">${safe(data.customer || 'Customer')}</div><div class="label date-label">DATE</div><div class="date-value">${safe(dateText)}</div><div class="label number-label">${docNoLabel}</div><div class="number-value">${safe(data.no)}</div>${tableHtml}${isLast ? `<section class="totals" style="top:${totalsTop}pt">${totalsHtml}</section>${notesHtml ? notesHtml.replace('<section class="notes"', `<section class="notes" style="top:${Math.min(680, totalsTop + 56)}pt"`) : ''}` : ''}<footer class="footer"><div class="footer-title">${thanks}</div><div class="footer-phone">☎ &nbsp;071 93 35 411&nbsp;&nbsp; | &nbsp;&nbsp;078 55 24 561</div><div class="footer-wa">WhatsApp: +94 75 16 56 777</div><div class="footer-motto">Three Dimensions - Endless Possibilities</div><img class="qr" src="../assets/whatsapp-qr.png" alt="WhatsApp QR"><div class="qr-caption">Scan to WhatsApp us</div></footer><div class="page-line">Page ${pageIndex + 1} of ${pageCount} &nbsp; · &nbsp; TRINI-D &nbsp; · &nbsp; Three Dimensions - Endless Possibilities</div></div>`;
+  }
+
+  const pagesHtml = chunks.map(renderPage).join('');
   const html = `<!doctype html><html><head><base href="${location.href}"><title>${filePrefix}_${safe(data.no)}.pdf</title><style>
-    @page{size:A4;margin:0}
-    *{box-sizing:border-box}
-    html,body{margin:0;padding:0;background:#fff;color:#111111;font-family:Arial,Helvetica,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}
-    .print-btn{position:fixed;right:12px;top:12px;z-index:50;border:0;border-radius:999px;background:#d4af37;color:#111;font-weight:900;padding:10px 16px;box-shadow:0 10px 30px rgba(0,0,0,.25);cursor:pointer}
-    .page{width:210mm;height:297mm;margin:0 auto;background:#fff;position:relative;overflow:hidden}
-    .header{position:absolute;left:0;top:0;width:210mm;height:110pt;background:#111111;border-bottom:2.5pt solid #d4af37}
-    .logo{position:absolute;left:18mm;top:16pt;width:78pt;height:78pt;object-fit:contain}
-    .brand-name{position:absolute;left:139pt;top:22pt;width:180pt;height:46pt;object-fit:contain}
-    .header-motto{position:absolute;left:139pt;top:76pt;width:180pt;text-align:center;font-size:6pt;font-weight:700;letter-spacing:.02em;white-space:nowrap;color:#e8e8e8;line-height:1}
-    .header-motto .gold{color:#d4af37}
-    .doc-title{position:absolute;right:18mm;top:35pt;text-align:right;color:#fff;font-size:20pt;font-weight:700;line-height:1;letter-spacing:.02em}
-    .doc-id-top{position:absolute;right:18mm;top:67pt;text-align:right;color:#d4af37;font-size:9pt;line-height:1}
-    .panel{position:absolute;left:18mm;top:120pt;width:174mm;height:68pt;background:#f2f2f2;border-radius:6pt}
-    .label{font-size:8pt;font-weight:700;color:#2d2d2d;text-transform:uppercase;line-height:1}
-    .customer-label{position:absolute;left:22mm;top:136pt}.customer-name{position:absolute;left:22mm;top:151pt;font-size:13pt;font-weight:700;color:#111;line-height:1}
-    .date-label{position:absolute;left:405pt;top:133pt}.date-value{position:absolute;left:405pt;top:147pt;font-size:10pt;color:#111;line-height:1}
-    .number-label{position:absolute;left:405pt;top:165pt}.number-value{position:absolute;left:405pt;top:178pt;font-size:8pt;font-weight:700;color:#d4af37;line-height:1}
-    .table-wrap{position:absolute;left:18mm;top:194pt;width:174mm;height:${tableHeightPt}pt;border-bottom:.5pt solid #cccccc}
-    .table-head{position:absolute;left:0;top:0;width:100%;height:26pt;background:#111111;border-bottom:1pt solid #d4af37;color:#d4af37;font-size:7.5pt;font-weight:700;text-transform:uppercase;line-height:1}
-    .th{position:absolute;top:10pt;text-align:center;white-space:nowrap}.th:first-child{text-align:left}
-    .doc-row{position:absolute;left:0;width:100%;font-size:9pt;color:#111;line-height:1}.row-light{background:#f2f2f2}.row-white{background:#ffffff}.td{position:absolute;top:8pt;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.q-model,.i-model,.i-model-disc,.id-model-disc{text-align:left;font-weight:700}.q-total,.i-total,.id-total-disc{font-weight:700;text-align:right}.q-unit,.q-layer,.q-walls,.q-infill,.id-qty-disc{color:#2d2d2d}.id-discount-disc{color:#cc3333}.quote-sub{position:absolute;left:4pt;font-size:7pt;font-style:italic;color:#cccccc;line-height:1}.spec-line{position:absolute;left:4pt;top:21pt}.spec-tag{display:inline-block;background:#2a2200;color:#d4af37;border-radius:2pt;padding:2pt 5pt;font-size:7pt;font-style:italic;line-height:1}
-    .c-model{left:4pt;text-align:left}.c-qty{left:136pt;width:40pt}.c-unit{left:190pt;width:68pt}.c-layer{left:271pt;width:58pt}.c-walls{left:333pt;width:59pt}.c-infill{left:395pt;width:55pt}.c-total{right:4pt;width:64pt}
-    .q-model{left:4pt;width:132pt}.q-qty{left:136pt;width:40pt;font-weight:700}.q-unit{left:190pt;width:68pt;font-size:8pt}.q-layer{left:271pt;width:58pt;font-size:8pt}.q-walls{left:333pt;width:59pt;font-size:8pt}.q-infill{left:395pt;width:55pt;font-size:8pt}.q-total{right:4pt;width:70pt}
-    .i-model{left:4pt;width:200pt}.i-qty{right:306pt;width:42pt;text-align:right;font-weight:700}.i-unit{right:178pt;width:90pt;text-align:right}.i-total{right:4pt;width:95pt;text-align:right;font-weight:700}.i-model-disc{left:4pt;width:180pt}.i-qty-disc{right:360pt;width:42pt;text-align:right;font-weight:700}.i-unit-disc{right:248pt;width:90pt;text-align:right}.i-discount-disc{right:126pt;width:95pt;text-align:right}.i-total-disc{right:4pt;width:95pt;text-align:right}.id-model-disc{left:4pt;width:180pt}.id-qty-disc{right:360pt;width:42pt;text-align:right;font-weight:700}.id-unit-disc{right:248pt;width:90pt;text-align:right}.id-discount-disc{right:126pt;width:95pt;text-align:right}.id-total-disc{right:4pt;width:95pt;text-align:right;font-weight:700}
-    .totals{position:absolute;right:18mm;top:${194 + tableHeightPt + 14}pt;width:90mm}.total-quote{height:24pt;background:#d4af37;color:#111;font-size:13pt;font-weight:700;display:flex;align-items:center;justify-content:space-between;padding:0 6pt}.total-main{height:20pt;background:#d4af37;color:#111;font-size:12pt;font-weight:700;display:flex;align-items:center;justify-content:space-between;padding:0 6pt}.total-mini{height:20pt;color:#111;font-size:9pt;display:flex;align-items:center;justify-content:space-between;padding:0 6pt}.total-mini.red span{color:#cc3333}.total-balance{height:20pt;background:#1a5c2a;color:#4ade80;font-size:12pt;font-weight:700;display:flex;align-items:center;justify-content:space-between;padding:0 6pt}
-    .notes{position:absolute;left:18mm;top:${194 + tableHeightPt + 64}pt;font-size:8pt;line-height:12pt;color:#111}.notes b{display:block;color:#2d2d2d;margin-bottom:4pt}.notes span{display:block}
-    .footer{position:absolute;left:0;bottom:14mm;width:210mm;height:90pt;background:#111111;border-top:2pt solid #d4af37;color:#fff}.footer-title{position:absolute;left:18mm;top:20pt;font-size:13pt;font-weight:700;color:#d4af37;line-height:1}.footer-phone{position:absolute;left:18mm;top:37pt;font-size:8.5pt;line-height:1;color:#fff}.footer-wa{position:absolute;left:18mm;top:51pt;font-size:8.5pt;line-height:1;color:#fff}.footer-motto{position:absolute;left:18mm;top:64pt;font-size:7.5pt;font-style:italic;color:#cccccc;line-height:1}.qr{position:absolute;right:18mm;top:11pt;width:68pt;height:68pt;background:#fff}.qr-caption{position:absolute;right:18mm;top:81pt;width:68pt;text-align:center;color:#cccccc;font-size:6.5pt;line-height:1}.page-line{position:absolute;left:0;right:0;bottom:0;height:12mm;line-height:12mm;text-align:center;color:#cccccc;font-size:7pt}
-    @media print{html,body{width:210mm;height:297mm;background:#fff}.print-btn{display:none}.page{margin:0;width:210mm;height:297mm}}
-  </style></head><body><button class="print-btn" onclick="window.print()">Print / Save PDF</button><div class="page"><header class="header"><img class="logo" src="../assets/logo.png" alt="Trini-D logo"><img class="brand-name" src="../assets/brand_name.png" alt="TRINI-D 3D Printing"><div class="header-motto">THREE&nbsp; DIMENTIONS&nbsp;&nbsp; - &nbsp;&nbsp;<span class="gold">ENDLESS</span>&nbsp; POSSIBILITIES</div><div class="doc-title">${docWord}</div><div class="doc-id-top"># ${safe(data.no)}</div></header><section class="panel"></section><div class="label customer-label">${partyLabel}</div><div class="customer-name">${safe(data.customer || 'Customer')}</div><div class="label date-label">DATE</div><div class="date-value">${safe(dateText)}</div><div class="label number-label">${docNoLabel}</div><div class="number-value">${safe(data.no)}</div><section class="table-wrap"><div class="table-head">${isInvoice ? invoiceHeaders : quoteHeaders}</div><div class="rows" style="position:absolute;left:0;top:26pt;width:100%;height:${rowTopPt}pt">${rows}</div></section><section class="totals">${totalsHtml}</section>${notesHtml}<footer class="footer"><div class="footer-title">${thanks}</div><div class="footer-phone">☎ &nbsp;071 93 35 411&nbsp;&nbsp; | &nbsp;&nbsp;078 55 24 561</div><div class="footer-wa">WhatsApp: +94 75 16 56 777</div><div class="footer-motto">Three Dimensions - Endless Possibilities</div><img class="qr" src="../assets/whatsapp-qr.png" alt="WhatsApp QR"><div class="qr-caption">Scan to WhatsApp us</div></footer><div class="page-line">Page 1 of 1 &nbsp; · &nbsp; TRINI-D &nbsp; · &nbsp; Three Dimensions - Endless Possibilities</div></div><script>window.onload = () => setTimeout(() => window.print(), 350);</script></body></html>`;
+    @page{size:A4;margin:0}*{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff;color:#111;font-family:Arial,Helvetica,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}.print-btn{position:fixed;right:12px;top:12px;z-index:50;border:0;border-radius:999px;background:#d4af37;color:#111;font-weight:900;padding:10px 16px;box-shadow:0 10px 30px rgba(0,0,0,.25);cursor:pointer}@media print{.print-btn{display:none}.page{margin:0!important;page-break-after:always}.page:last-child{page-break-after:auto}}.page{width:210mm;height:297mm;margin:0 auto;background:#fff;position:relative;overflow:hidden}.header{position:absolute;left:0;top:0;width:210mm;height:110pt;background:#111;border-bottom:2.5pt solid #d4af37}.logo{position:absolute;left:18mm;top:16pt;width:78pt;height:78pt;object-fit:contain}.brand-name{position:absolute;left:139pt;top:22pt;width:180pt;height:46pt;object-fit:contain}.header-motto{position:absolute;left:139pt;top:76pt;width:180pt;text-align:center;font-size:6pt;font-weight:700;letter-spacing:.02em;white-space:nowrap;color:#e8e8e8;line-height:1}.header-motto .gold{color:#d4af37}.doc-title{position:absolute;right:18mm;top:35pt;text-align:right;color:#fff;font-size:20pt;font-weight:700;line-height:1;letter-spacing:.02em}.doc-id-top{position:absolute;right:18mm;top:67pt;text-align:right;color:#d4af37;font-size:9pt;line-height:1}.panel{position:absolute;left:18mm;top:120pt;width:174mm;height:68pt;background:#f2f2f2;border-radius:6pt}.label{font-size:8pt;font-weight:700;color:#2d2d2d;text-transform:uppercase;line-height:1}.customer-label{position:absolute;left:22mm;top:136pt}.customer-name{position:absolute;left:22mm;top:151pt;font-size:13pt;font-weight:700;color:#111;line-height:1}.date-label{position:absolute;left:405pt;top:133pt}.date-value{position:absolute;left:405pt;top:147pt;font-size:10pt;color:#111;line-height:1}.number-label{position:absolute;left:405pt;top:165pt}.number-value{position:absolute;left:405pt;top:178pt;font-size:8pt;font-weight:700;color:#d4af37;line-height:1}.table-wrap{position:absolute;left:18mm;top:194pt;width:174mm;border-bottom:.5pt solid #ccc}.table-head{position:absolute;left:0;top:0;width:100%;height:26pt;background:#111;border-bottom:1pt solid #d4af37;color:#d4af37;font-size:7.5pt;font-weight:700;text-transform:uppercase;line-height:1}.th{position:absolute;top:10pt;text-align:center;white-space:nowrap}.th:first-child{text-align:left}.doc-row{position:absolute;left:0;width:100%;font-size:9pt;color:#111;line-height:1}.row-light{background:#f2f2f2}.row-white{background:#fff}.td{position:absolute;top:8pt;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.q-model,.i-model,.i-model-disc,.id-model-disc{text-align:left;font-weight:700}.q-total,.i-total,.id-total-disc{font-weight:700;text-align:right}.q-unit,.q-layer,.q-walls,.q-infill,.id-qty-disc{color:#2d2d2d}.id-discount-disc{color:#cc3333}.quote-sub{position:absolute;left:4pt;font-size:7pt;font-style:italic;color:#888;line-height:1}.spec-line{position:absolute;left:4pt;top:21pt}.spec-tag{display:inline-block;background:#2a2200;color:#d4af37;border-radius:2pt;padding:2pt 5pt;font-size:7pt;font-style:italic;line-height:1}.c-model{left:4pt;text-align:left}.c-qty{left:136pt;width:40pt}.c-unit{left:190pt;width:68pt}.c-layer{left:271pt;width:58pt}.c-walls{left:333pt;width:59pt}.c-infill{left:395pt;width:55pt}.c-total{right:4pt;width:64pt}.q-model{left:4pt;width:132pt}.q-qty{left:136pt;width:40pt;font-weight:700}.q-unit{left:190pt;width:68pt;font-size:8pt}.q-layer{left:271pt;width:58pt;font-size:8pt}.q-walls{left:333pt;width:59pt;font-size:8pt}.q-infill{left:395pt;width:55pt;font-size:8pt}.q-total{right:4pt;width:70pt}.i-model{left:4pt;width:220pt}.i-qty{left:245pt;width:40pt;font-weight:700}.i-unit{left:310pt;width:85pt}.i-total{right:4pt;width:90pt}.i-model-disc{left:4pt;text-align:left}.i-qty-disc{left:292pt;width:35pt}.i-unit-disc{left:340pt;width:70pt}.i-discount-disc{left:430pt;width:60pt}.i-total-disc{right:4pt;width:62pt}.id-model-disc{left:4pt;width:280pt}.id-qty-disc{left:292pt;width:35pt}.id-unit-disc{left:332pt;width:80pt}.id-discount-disc{left:418pt;width:72pt}.id-total-disc{right:4pt;width:72pt}.totals{position:absolute;right:18mm;width:90mm}.total-quote,.total-main,.total-balance{height:24pt;background:#d4af37;color:#111;font-size:12pt;font-weight:700;line-height:24pt;padding:0 8pt}.total-quote{display:flex;justify-content:space-between}.total-main,.total-balance,.total-mini{display:flex;justify-content:space-between}.total-mini{height:20pt;color:#111;font-size:9pt;line-height:20pt;padding:0 8pt}.total-mini.red{color:#cc3333}.total-balance{background:#1a5c2a;color:#4ade80}.notes{position:absolute;left:18mm;width:95mm;font-size:8pt;color:#111}.notes b{display:block;color:#2d2d2d;margin-bottom:4pt}.notes span{display:block;margin-bottom:3pt}.footer{position:absolute;left:0;bottom:38pt;width:210mm;height:90pt;background:#111;border-top:2pt solid #d4af37}.footer-title{position:absolute;left:18mm;top:20pt;color:#d4af37;font-size:13pt;font-weight:700}.footer-phone{position:absolute;left:18mm;top:42pt;color:#fff;font-size:8.5pt}.footer-wa{position:absolute;left:18mm;top:56pt;color:#fff;font-size:8.5pt}.footer-motto{position:absolute;left:18mm;top:70pt;color:#ccc;font-size:7.5pt;font-style:italic}.qr{position:absolute;right:18mm;top:14pt;width:68pt;height:68pt}.qr-caption{position:absolute;right:18mm;top:83pt;width:68pt;text-align:center;color:#ccc;font-size:6.5pt}.page-line{position:absolute;left:0;bottom:15pt;width:210mm;text-align:center;font-size:7pt;color:#bbb}
+  </style></head><body><button class="print-btn" onclick="window.print()">Print / Save PDF</button>${pagesHtml}<script>window.onload = () => setTimeout(() => window.print(), 350);</script></body></html>`;
   const win = window.open('', '_blank');
-  win.document.open();
   win.document.write(html);
   win.document.close();
 }
@@ -762,6 +800,14 @@ function initDatabase() {
     if (orderBtn) return addSingleItemToOrders(orderBtn.dataset.itemToOrder);
     const billBtn = e.target.closest('[data-item-to-bill]');
     if (billBtn) return useSingleItemInBill(billBtn.dataset.itemToBill);
+    const editItem = e.target.closest('[data-edit-item]');
+    if (editItem) return editItemRecord(editItem.dataset.editItem);
+    const editOrder = e.target.closest('[data-edit-order]');
+    if (editOrder) return editOrderRecord(editOrder.dataset.editOrder);
+    const printInvoice = e.target.closest('[data-print-invoice]');
+    if (printInvoice) return printStoredInvoice(printInvoice.dataset.printInvoice);
+    const printQuote = e.target.closest('[data-print-quote]');
+    if (printQuote) return printStoredQuote(printQuote.dataset.printQuote);
     const del = e.target.closest('[data-delete]');
     if (!del) return;
     deleteRecord(del.dataset.delete, del.dataset.kind);
@@ -787,6 +833,87 @@ function addSelectedToCustom() {
   selectedItemIds.clear();
   saveDb();
   toast('Selected items copied to custom table');
+}
+
+function editValue(label, currentValue) {
+  const value = prompt(label, currentValue ?? '');
+  return value === null ? currentValue : value;
+}
+
+function editNumberValue(label, currentValue) {
+  const value = prompt(label, currentValue ?? 0);
+  if (value === null) return currentValue;
+  return num(value);
+}
+
+function editItemRecord(itemId) {
+  const item = db.itemRecords.find(r => r.id === itemId);
+  if (!item) return;
+  item.customer = editValue('Customer name', item.customer);
+  item.model = editValue('Model / item name', item.model);
+  const status = editValue('Status: Success or Failed', item.status || 'Success');
+  item.status = /^f/i.test(status) ? 'Failed' : 'Success';
+  item.printTimeMinutes = editNumberValue('Print time in minutes', item.printTimeMinutes);
+  item.weightG = editNumberValue('Weight in grams', item.weightG);
+  item.totalCost = editNumberValue('Total cost Rs', item.totalCost);
+  item.price = item.status === 'Failed' ? 0 : editNumberValue('Selling price Rs', item.price);
+  item.profit = num(item.price) - num(item.totalCost);
+  item.calcFingerprint = calcFingerprint(item);
+  saveDb();
+  toast('Item record updated');
+}
+
+function editOrderRecord(orderId) {
+  const order = db.orders.find(r => r.id === orderId);
+  if (!order) return;
+  order.orderId = editValue('Order ID', order.orderId);
+  order.customer = editValue('Customer name', order.customer);
+  order.model = editValue('Model / item name', order.model);
+  order.datePrinted = editValue('Date printed YYYY-MM-DD', order.datePrinted || todayISO());
+  const paid = editValue('Paid status: Paid or Unpaid', normalizePaidStatus(order.paidStatus) || 'Unpaid');
+  order.paidStatus = /^p/i.test(paid) ? 'Paid' : 'Unpaid';
+  order.paidMethod = editValue('Paid method', order.paidMethod || '');
+  order.advancePayment = editNumberValue('Advance payment Rs', order.advancePayment);
+  order.totalCost = editNumberValue('Total cost Rs', order.totalCost);
+  order.price = editNumberValue('Price Rs', order.price);
+  order.profit = num(order.price) - num(order.totalCost);
+  saveDb();
+  toast('Order record updated');
+}
+
+function printableInvoiceData(r) {
+  if (r.documentData) return r.documentData;
+  const items = (r.items || []).map(item => ({ ...item, unitPrice: num(item.unitPrice ?? item.unit), discount: num(item.discount), cost: num(item.cost) }));
+  return {
+    type: 'INVOICE',
+    no: r.invoiceNo || r.orderId || docId('INV'),
+    date: r.date || todayISO(),
+    customer: r.customer || '',
+    notes: r.notes || '',
+    items,
+    totals: { subtotal: num(r.subtotal), discount: num(r.discount), total: num(r.total), advance: num(r.advancePayment), balance: num(r.balance), cost: num(r.totalCost), profit: num(r.profit) },
+    paidStatus: r.paidStatus || 'Unpaid',
+    paidMethod: r.paidMethod || ''
+  };
+}
+
+function printableQuoteData(r) {
+  if (r.documentData) return r.documentData;
+  const items = (r.items || []).map(item => ({ ...item, unitPrice: num(item.unitPrice ?? item.unit) }));
+  const totals = quoteTotals(items);
+  return { type: 'QUOTATION', no: r.quoteNo || docId('QT'), date: r.date || todayISO(), customer: r.customer || '', notes: r.notes || '', items, totals: { ...totals, total: num(r.total) || totals.total } };
+}
+
+function printStoredInvoice(recordId) {
+  const record = (db.invoices || []).find(r => r.id === recordId);
+  if (!record) return alert('Invoice record not found.');
+  printDocument(printableInvoiceData(record));
+}
+
+function printStoredQuote(recordId) {
+  const record = (db.quotes || []).find(r => r.id === recordId);
+  if (!record) return alert('Quotation record not found.');
+  printDocument(printableQuoteData(record));
 }
 
 function deleteRecord(recordId, kind) {
@@ -937,25 +1064,25 @@ function renderDatabaseTable() {
   if (activeDbTable === 'items') {
     rows = db.itemRecords.filter(include);
     headers = '<tr><th>✓</th><th>Date</th><th>Customer</th><th>Model</th><th>Status</th><th>Print Time</th><th>Weight</th><th>Cost</th><th>Price</th><th>Profit</th><th>Actions</th></tr>';
-    body = rows.map(r => `<tr><td><input class="item-select" type="checkbox" value="${r.id}" ${selectedItemIds.has(r.id) ? 'checked' : ''}></td><td>${safe(r.datePrinted || r.createdAt)}</td><td>${safe(r.customer)}</td><td>${safe(r.model)}</td><td><span class="pill-status ${String(r.status).toLowerCase()}">${safe(r.status)}</span></td><td>${minutesLabel(r.printTimeMinutes)}</td><td>${Number(r.weightG || 0).toFixed(2)} g</td><td>${money(r.totalCost)}</td><td>${money(r.price)}</td><td>${money(r.profit)}</td><td class="row-actions"><button class="small-btn" data-item-to-order="${r.id}">Order</button><button class="small-btn" data-item-to-bill="${r.id}">Bill</button><button class="small-btn" data-delete="${r.id}" data-kind="item">Delete</button></td></tr>`).join('');
+    body = rows.map(r => `<tr><td><input class="item-select" type="checkbox" value="${r.id}" ${selectedItemIds.has(r.id) ? 'checked' : ''}></td><td>${safe(r.datePrinted || r.createdAt)}</td><td>${safe(r.customer)}</td><td>${safe(r.model)}</td><td><span class="pill-status ${String(r.status).toLowerCase()}">${safe(r.status)}</span></td><td>${minutesLabel(r.printTimeMinutes)}</td><td>${Number(r.weightG || 0).toFixed(2)} g</td><td>${money(r.totalCost)}</td><td>${money(r.price)}</td><td>${money(r.profit)}</td><td class="row-actions"><button class="small-btn" data-edit-item="${r.id}">Edit</button><button class="small-btn" data-item-to-order="${r.id}">Order</button><button class="small-btn" data-item-to-bill="${r.id}">Bill</button><button class="small-btn" data-delete="${r.id}" data-kind="item">Delete</button></td></tr>`).join('');
   }
   if (activeDbTable === 'orders') {
     rows = db.orders.filter(include);
-    headers = '<tr><th>Date</th><th>Order ID</th><th>Customer</th><th>Model</th><th>Paid Status</th><th>Advance</th><th>Cost</th><th>Price</th><th>Profit</th><th></th></tr>';
+    headers = '<tr><th>Date</th><th>Order ID</th><th>Customer</th><th>Model</th><th>Paid Status</th><th>Advance</th><th>Cost</th><th>Price</th><th>Profit</th><th>Actions</th></tr>';
     body = rows.map(r => {
       const paidStatus = normalizePaidStatus(r.paidStatus) || 'Unpaid';
-      return `<tr><td>${safe(r.datePrinted)}</td><td>${safe(r.orderId)}</td><td>${safe(r.customer)}</td><td>${safe(r.model)}</td><td><select class="order-paid-select ${paidStatus.toLowerCase()}" data-order-paid="${r.id}"><option value="Paid" ${paidStatus === 'Paid' ? 'selected' : ''}>Paid</option><option value="Unpaid" ${paidStatus === 'Unpaid' ? 'selected' : ''}>Unpaid</option></select></td><td>${money(r.advancePayment)}</td><td>${money(r.totalCost)}</td><td>${money(r.price)}</td><td>${money(r.profit)}</td><td><button class="small-btn" data-delete="${r.id}" data-kind="order">Delete</button></td></tr>`;
+      return `<tr><td>${safe(r.datePrinted)}</td><td>${safe(r.orderId)}</td><td>${safe(r.customer)}</td><td>${safe(r.model)}</td><td><select class="order-paid-select ${paidStatus.toLowerCase()}" data-order-paid="${r.id}"><option value="Paid" ${paidStatus === 'Paid' ? 'selected' : ''}>Paid</option><option value="Unpaid" ${paidStatus === 'Unpaid' ? 'selected' : ''}>Unpaid</option></select></td><td>${money(r.advancePayment)}</td><td>${money(r.totalCost)}</td><td>${money(r.price)}</td><td>${money(r.profit)}</td><td class="row-actions"><button class="small-btn" data-edit-order="${r.id}">Edit</button><button class="small-btn" data-delete="${r.id}" data-kind="order">Delete</button></td></tr>`;
     }).join('');
   }
   if (activeDbTable === 'invoices') {
     rows = (db.invoices || []).filter(include);
-    headers = '<tr><th>Date</th><th>Invoice No</th><th>Customer</th><th>Items</th><th>Paid</th><th>Subtotal</th><th>Discount</th><th>Advance</th><th>Balance</th><th>Total</th><th></th></tr>';
-    body = rows.map(r => `<tr><td>${safe(r.date)}</td><td>${safe(r.invoiceNo || r.orderId)}</td><td>${safe(r.customer)}</td><td>${safe((r.items || []).map(i => i.model).join(', '))}</td><td><span class="pill-status ${String(r.paidStatus || '').toLowerCase()}">${safe(r.paidStatus || '-')}</span></td><td>${money(r.subtotal)}</td><td>${money(r.discount)}</td><td>${money(r.advancePayment)}</td><td>${money(r.balance)}</td><td>${money(r.total)}</td><td><button class="small-btn" data-delete="${r.id}" data-kind="invoice">Delete</button></td></tr>`).join('');
+    headers = '<tr><th>Date</th><th>Invoice No</th><th>Customer</th><th>Items</th><th>Paid</th><th>Subtotal</th><th>Discount</th><th>Advance</th><th>Balance</th><th>Total</th><th>Actions</th></tr>';
+    body = rows.map(r => `<tr><td>${safe(r.date)}</td><td>${safe(r.invoiceNo || r.orderId)}</td><td>${safe(r.customer)}</td><td>${safe((r.items || []).map(i => i.model).join(', '))}</td><td><span class="pill-status ${String(r.paidStatus || '').toLowerCase()}">${safe(r.paidStatus || '-')}</span></td><td>${money(r.subtotal)}</td><td>${money(r.discount)}</td><td>${money(r.advancePayment)}</td><td>${money(r.balance)}</td><td>${money(r.total)}</td><td class="row-actions"><button class="small-btn" data-print-invoice="${r.id}">Download PDF</button><button class="small-btn" data-delete="${r.id}" data-kind="invoice">Delete</button></td></tr>`).join('');
   }
   if (activeDbTable === 'quotes') {
     rows = db.quotes.filter(include);
-    headers = '<tr><th>Date</th><th>Quote No</th><th>Customer</th><th>Items</th><th>Total</th><th></th></tr>';
-    body = rows.map(r => `<tr><td>${safe(r.date)}</td><td>${safe(r.quoteNo)}</td><td>${safe(r.customer)}</td><td>${safe((r.items || []).map(i => i.model).join(', '))}</td><td>${money(r.total)}</td><td><button class="small-btn" data-delete="${r.id}" data-kind="quote">Delete</button></td></tr>`).join('');
+    headers = '<tr><th>Date</th><th>Quote No</th><th>Customer</th><th>Items</th><th>Total</th><th>Actions</th></tr>';
+    body = rows.map(r => `<tr><td>${safe(r.date)}</td><td>${safe(r.quoteNo)}</td><td>${safe(r.customer)}</td><td>${safe((r.items || []).map(i => i.model).join(', '))}</td><td>${money(r.total)}</td><td class="row-actions"><button class="small-btn" data-print-quote="${r.id}">Download PDF</button><button class="small-btn" data-delete="${r.id}" data-kind="quote">Delete</button></td></tr>`).join('');
   }
   if (activeDbTable === 'custom') {
     const groupId = $('#customGroupSelect').value;

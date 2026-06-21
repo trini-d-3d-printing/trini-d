@@ -152,10 +152,14 @@
               <label class="field"><span>Quotation No</span><input id="quoteNo" type="text" readonly></label>
               <label class="field"><span>Date</span><input id="quoteDate" type="date"></label>
             </div>
+            <div class="summary-grid quote-summary-grid">
+              <div><span>Total Weight</span><b id="quoteTotalWeight">0.00 g</b></div>
+              <div><span>Total Printing Time</span><b id="quoteTotalTime">0m</b></div>
+              <div><span>Quotation Total</span><b id="quoteGrandTotal">Rs 0.00</b></div>
+            </div>
             <div class="table-wrap line-editor"><table><thead><tr><th>Model</th><th>Qty</th><th>Unit Price</th><th>Layer</th><th>Walls</th><th>Infill</th><th>Weight</th><th>Print Time</th><th></th></tr></thead><tbody id="quoteItemsBody"></tbody></table></div>
             <div class="admin-actions"><button class="btn ghost" id="addQuoteRowBtn" type="button">+ Add Item</button><button class="btn ghost" id="addCalcQuoteBtn" type="button">Add Calculator Result</button></div>
             <label class="field"><span>Notes optional</span><textarea id="quoteNotes" rows="3" placeholder="Validity, delivery, conditions..."></textarea></label>
-            <div class="summary-box"><span>Quotation Total</span><b id="quoteGrandTotal">Rs 0.00</b></div>
             <button class="btn primary" type="submit">Generate Quotation PDF / Print</button>
           </form>
         </div>
