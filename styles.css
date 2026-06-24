@@ -395,3 +395,14 @@ a{color:inherit;text-decoration:none}img{max-width:100%;display:block}button,inp
   .showcase-steps{left:8px;right:8px;bottom:0;grid-template-columns:1fr 1fr 1fr;gap:6px;}
   .showcase-steps span{font-size:.72rem;padding:9px 7px;}
 }
+
+/* Trini-D v17: simple input fields only - remove number spinner arrows */
+input[type="number"] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}

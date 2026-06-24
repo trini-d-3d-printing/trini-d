@@ -169,3 +169,14 @@ body.firebase-signed-out .admin-shell {
 .quote-summary-grid div:nth-child(3) span,.quote-summary-grid div:nth-child(3) b{color:#0b0d10!important}
 .row-actions{display:flex;gap:6px;flex-wrap:wrap;align-items:center}
 @media(max-width:720px){.quote-summary-grid{grid-template-columns:1fr}}
+
+/* Trini-D v17: simple input fields only - remove number spinner arrows */
+input[type="number"] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+input[type="number"]::-webkit-outer-spin-button,
+input[type="number"]::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}

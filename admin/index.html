@@ -98,29 +98,29 @@
           <form id="calculatorForm" class="admin-form">
             <h3 class="form-subtitle">Operational Base</h3>
             <div class="form-grid admin-form-grid four">
-              <label class="field"><span>Filament Price Rs/kg</span><input id="P" type="number" step="0.01" required></label>
-              <label class="field"><span>Filament Density g/cm³</span><input id="rho" type="number" step="0.001" required></label>
-              <label class="field"><span>Filament Diameter mm</span><input id="d_mm" type="number" step="0.01" required></label>
-              <label class="field"><span>Power Consumption W</span><input id="W" type="number" step="0.01" required></label>
-              <label class="field"><span>Electricity Rs/kWh</span><input id="R" type="number" step="0.01" required></label>
-              <label class="field"><span>Printer Cost Rs</span><input id="Cp" type="number" step="0.01" required></label>
-              <label class="field"><span>Printer Lifetime Hours</span><input id="H" type="number" step="0.01" required></label>
-              <label class="field"><span>Failure Risk 0-1</span><input id="F" type="number" step="0.001" min="0" max="0.99" required></label>
-              <label class="field"><span>UPS Cost Rs optional</span><input id="Cups" type="number" step="0.01"></label>
-              <label class="field"><span>UPS Lifetime Hours</span><input id="Hups" type="number" step="0.01"></label>
+              <label class="field"><span>Filament Price Rs/kg</span><input id="P" type="text" inputmode="decimal" step="0.01" required></label>
+              <label class="field"><span>Filament Density g/cm³</span><input id="rho" type="text" inputmode="decimal" step="0.001" required></label>
+              <label class="field"><span>Filament Diameter mm</span><input id="d_mm" type="text" inputmode="decimal" step="0.01" required></label>
+              <label class="field"><span>Power Consumption W</span><input id="W" type="text" inputmode="decimal" step="0.01" required></label>
+              <label class="field"><span>Electricity Rs/kWh</span><input id="R" type="text" inputmode="decimal" step="0.01" required></label>
+              <label class="field"><span>Printer Cost Rs</span><input id="Cp" type="text" inputmode="decimal" step="0.01" required></label>
+              <label class="field"><span>Printer Lifetime Hours</span><input id="H" type="text" inputmode="decimal" step="0.01" required></label>
+              <label class="field"><span>Failure Risk 0-1</span><input id="F" type="text" inputmode="decimal" step="0.001" min="0" max="0.99" required></label>
+              <label class="field"><span>UPS Cost Rs optional</span><input id="Cups" type="text" inputmode="decimal" step="0.01"></label>
+              <label class="field"><span>UPS Lifetime Hours</span><input id="Hups" type="text" inputmode="decimal" step="0.01"></label>
             </div>
 
             <h3 class="form-subtitle">Job Specifics</h3>
             <div class="form-grid admin-form-grid four">
               <label class="field"><span>Customer optional</span><input id="calcCustomer" type="text" placeholder="Customer name"></label>
               <label class="field"><span>Model Name</span><input id="calcModel" type="text" placeholder="Model / item name"></label>
-              <label class="field"><span>Days</span><input id="calcDays" type="number" step="1" min="0" value="0"></label>
-              <label class="field"><span>Hours</span><input id="calcHours" type="number" step="1" min="0" value="0"></label>
-              <label class="field"><span>Minutes</span><input id="calcMinutes" type="number" step="1" min="0" value="0"></label>
+              <label class="field"><span>Days</span><input id="calcDays" type="text" inputmode="decimal" step="1" min="0" value="0"></label>
+              <label class="field"><span>Hours</span><input id="calcHours" type="text" inputmode="decimal" step="1" min="0" value="0"></label>
+              <label class="field"><span>Minutes</span><input id="calcMinutes" type="text" inputmode="decimal" step="1" min="0" value="0"></label>
               <label class="field"><span>Input By</span><select id="materialMode"><option value="Length">Length (Meters)</option><option value="Weight">Weight (Grams)</option></select></label>
-              <label class="field" id="lengthField"><span>Filament Length m</span><input id="lengthM" type="number" step="0.01"></label>
-              <label class="field" id="weightField"><span>Filament Weight g</span><input id="weightG" type="number" step="0.01"></label>
-              <label class="field"><span>Profit Margin %</span><input id="margin" type="number" step="0.01" value="0"></label>
+              <label class="field" id="lengthField"><span>Filament Length m</span><input id="lengthM" type="text" inputmode="decimal" step="0.01"></label>
+              <label class="field" id="weightField"><span>Filament Weight g</span><input id="weightG" type="text" inputmode="decimal" step="0.01"></label>
+              <label class="field"><span>Profit Margin %</span><input id="margin" type="text" inputmode="decimal" step="0.01" value="0"></label>
               <label class="field"><span>Item Status</span><select id="calcStatus"><option>Success</option><option>Failed</option></select></label>
             </div>
             <div class="admin-actions">
@@ -175,7 +175,7 @@
               <label class="field"><span>Date</span><input id="billDate" type="date"></label>
               <label class="field"><span>Paid Status</span><select id="billPaidStatus"><option value="Unpaid">Unpaid</option><option value="Paid">Paid</option><option value="Advance">Advance</option></select></label>
               <label class="field"><span>Paid Method</span><input id="billPaidMethod" type="text" placeholder="Cash / Bank / Online"></label>
-              <label class="field"><span>Advance Paid Rs</span><input id="billAdvance" type="number" step="0.01" value="0"></label>
+              <label class="field"><span>Advance Paid Rs</span><input id="billAdvance" type="text" inputmode="decimal" step="0.01" value="0"></label>
             </div>
             <div class="table-wrap line-editor"><table><thead><tr><th>Model</th><th>Qty</th><th>Unit Price</th><th>Discount</th><th>Cost Rs</th><th>Layer</th><th>Walls</th><th>Infill</th><th></th></tr></thead><tbody id="billItemsBody"></tbody></table></div>
             <div class="admin-actions"><button class="btn ghost" id="addBillRowBtn" type="button">+ Add Item</button><button class="btn ghost" id="addCalcBillBtn" type="button">Add Calculator Result</button></div>
@@ -226,7 +226,7 @@
                 <label class="field"><span>Date</span><input id="budgetDate" type="date"></label>
                 <label class="field"><span>Type</span><select id="budgetType"><option>Expense</option><option>Income</option></select></label>
                 <label class="field"><span>Category</span><input id="budgetCategory" type="text" placeholder="General Income / General Expense"></label>
-                <label class="field"><span>Amount Rs</span><input id="budgetAmount" type="number" step="0.01" required></label>
+                <label class="field"><span>Amount Rs</span><input id="budgetAmount" type="text" inputmode="decimal" step="0.01" required></label>
                 <label class="field"><span>Source</span><input id="budgetSource" type="text" placeholder="Manual / Order"></label>
                 <label class="field full"><span>Description</span><input id="budgetDescription" type="text" placeholder="Short description"></label>
               </div>

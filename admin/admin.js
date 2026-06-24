@@ -462,8 +462,9 @@ function minutesLabel(minutes) {
 }
 
 function lineInput(value, cls = '', type = 'text') {
-  const stepAttr = type === 'number' ? ' step="any" inputmode="decimal"' : '';
-  return `<input class="${cls}" type="${type}"${stepAttr} value="${safe(value ?? '')}">`;
+  const inputType = type === 'number' ? 'text' : type;
+  const stepAttr = type === 'number' ? ' inputmode="decimal"' : '';
+  return `<input class="${cls}" type="${inputType}"${stepAttr} value="${safe(value ?? '')}">`;
 }
 
 function addBillRow(data = {}) {
