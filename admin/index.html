@@ -158,7 +158,7 @@
               <div><span>Quotation Total</span><b id="quoteGrandTotal">Rs 0.00</b></div>
             </div>
             <div class="table-wrap line-editor"><table><thead><tr><th>Model</th><th>Qty</th><th>Unit Price</th><th>Layer</th><th>Walls</th><th>Infill</th><th>Weight</th><th>Print Time</th><th></th></tr></thead><tbody id="quoteItemsBody"></tbody></table></div>
-            <div class="admin-actions"><button class="btn ghost" id="addQuoteRowBtn" type="button">+ Add Item</button><button class="btn ghost" id="addCalcQuoteBtn" type="button">Add Calculator Result</button></div>
+            <div class="admin-actions"><button class="btn ghost" id="addQuoteRowBtn" type="button">+ Add Item</button><button class="btn ghost" id="addCalcQuoteBtn" type="button">Add Calculator Result</button><button class="btn ghost" id="resetQuoteBtn" type="button">Reset Quotation</button></div>
             <label class="field"><span>Notes optional</span><textarea id="quoteNotes" rows="3" placeholder="Validity, delivery, conditions..."></textarea></label>
             <button class="btn primary" type="submit">Generate Quotation PDF / Print</button>
           </form>
@@ -178,7 +178,7 @@
               <label class="field"><span>Advance Paid Rs</span><input id="billAdvance" type="text" inputmode="decimal" step="0.01" value="0"></label>
             </div>
             <div class="table-wrap line-editor"><table><thead><tr><th>Model</th><th>Qty</th><th>Unit Price</th><th>Discount</th><th>Cost Rs</th><th>Layer</th><th>Walls</th><th>Infill</th><th></th></tr></thead><tbody id="billItemsBody"></tbody></table></div>
-            <div class="admin-actions"><button class="btn ghost" id="addBillRowBtn" type="button">+ Add Item</button><button class="btn ghost" id="addCalcBillBtn" type="button">Add Calculator Result</button></div>
+            <div class="admin-actions"><button class="btn ghost" id="addBillRowBtn" type="button">+ Add Item</button><button class="btn ghost" id="addCalcBillBtn" type="button">Add Calculator Result</button><button class="btn ghost" id="resetBillBtn" type="button">Reset Invoice</button></div>
             <label class="field"><span>Notes optional</span><textarea id="billNotes" rows="3" placeholder="Payment note, pickup note..."></textarea></label>
             <div class="summary-grid">
               <div><span>Subtotal</span><b id="billSubtotal">Rs 0.00</b></div>
