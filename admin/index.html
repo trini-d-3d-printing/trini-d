@@ -160,7 +160,11 @@
             <div class="table-wrap line-editor"><table><thead><tr><th>Model</th><th>Qty</th><th>Unit Price</th><th>Layer</th><th>Walls</th><th>Infill</th><th>Weight</th><th>Print Time</th><th></th></tr></thead><tbody id="quoteItemsBody"></tbody></table></div>
             <div class="admin-actions"><button class="btn ghost" id="addQuoteRowBtn" type="button">+ Add Item</button><button class="btn ghost" id="addCalcQuoteBtn" type="button">Add Calculator Result</button><button class="btn ghost" id="resetQuoteBtn" type="button">Reset Quotation</button></div>
             <label class="field"><span>Notes optional</span><textarea id="quoteNotes" rows="3" placeholder="Validity, delivery, conditions..."></textarea></label>
-            <button class="btn primary" type="submit">Generate Quotation PDF / Print</button>
+            <div class="admin-actions quotation-pdf-actions">
+              <button class="btn primary" type="submit">Generate Both Quotation PDFs</button>
+              <button class="btn ghost" id="quoteCustomerPdfBtn" type="button">Customer PDF Only</button>
+              <button class="btn ghost" id="quoteInternalPdfBtn" type="button">Internal PDF Only</button>
+            </div>
           </form>
         </div>
       </section>

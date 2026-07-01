@@ -587,7 +587,8 @@ function billTotals(items = collectBillItems()) {
 function parseWeightG(value) {
   const text = String(value || '').trim().toLowerCase();
   if (!text) return 0;
-  const n = num(text);
+  const match = text.replace(/,/g, '').match(/-?\d+(?:\.\d+)?/);
+  const n = match ? Number(match[0]) : 0;
   if (!n) return 0;
   if (text.includes('kg')) return n * 1000;
   return n;
@@ -608,9 +609,9 @@ function parsePrintTimeMinutes(value) {
 }
 
 function quoteTotals(items = collectQuoteItems()) {
-  const total = items.reduce((sum, item) => sum + (item.qty * item.unitPrice), 0);
-  const weightG = items.reduce((sum, item) => sum + parseWeightG(item.weight), 0);
-  const printMinutes = items.reduce((sum, item) => sum + parsePrintTimeMinutes(item.printTime), 0);
+  const total = items.reduce((sum, item) => sum + ((num(item.qty) || 1) * num(item.unitPrice)), 0);
+  const weightG = items.reduce((sum, item) => sum + ((num(item.qty) || 1) * parseWeightG(item.weight)), 0);
+  const printMinutes = items.reduce((sum, item) => sum + ((num(item.qty) || 1) * parsePrintTimeMinutes(item.printTime)), 0);
   return { total, weightG, printMinutes };
 }
 
@@ -751,6 +752,8 @@ function initBillQuote() {
       if (wasQuote) saveQuoteDraft();
     }
   });
+  $('#quoteCustomerPdfBtn')?.addEventListener('click', printCustomerQuotationOnly);
+  $('#quoteInternalPdfBtn')?.addEventListener('click', printInternalQuotationOnly);
   $('#billAdminForm').addEventListener('submit', generateInvoice);
   $('#quoteAdminForm').addEventListener('submit', generateQuotation);
 }
@@ -789,12 +792,14 @@ function generateInvoice(e) {
   toast('Invoice saved to Bills / Invoices database only');
 }
 
-function generateQuotation(e) {
-  e.preventDefault();
+function buildQuotationDataFromForm() {
   const items = collectQuoteItems();
-  if (!items.length) return alert('Please add at least one quotation item.');
+  if (!items.length) {
+    alert('Please add at least one quotation item.');
+    return null;
+  }
   const totals = quoteTotals(items);
-  const data = {
+  return {
     type: 'QUOTATION',
     no: $('#quoteNo').value,
     date: $('#quoteDate').value || todayISO(),
@@ -803,13 +808,50 @@ function generateQuotation(e) {
     items,
     totals
   };
-  printDocument(data);
-  printInternalQuotationDocument(data);
-  db.quotes.unshift({ id: id('QUOTE'), createdAt: nowStamp(), quoteNo: data.no, customer: data.customer, date: data.date, total: totals.total, totalWeightG: totals.weightG, totalPrintMinutes: totals.printMinutes, items, notes: data.notes, documentData: data });
+}
+
+function saveQuotationRecord(data) {
+  if (!data) return;
+  db.quotes.unshift({
+    id: id('QUOTE'),
+    createdAt: nowStamp(),
+    quoteNo: data.no,
+    customer: data.customer,
+    date: data.date,
+    total: data.totals.total,
+    totalWeightG: data.totals.weightG,
+    totalPrintMinutes: data.totals.printMinutes,
+    items: data.items,
+    notes: data.notes,
+    documentData: data
+  });
   saveDb();
   $('#quoteNo').value = docId('QT');
   saveQuoteDraft();
-  toast('Quotation saved to database. Customer and internal PDFs opened.');
+}
+
+function printCustomerQuotationOnly() {
+  const data = buildQuotationDataFromForm();
+  if (!data) return;
+  printDocument(data);
+  toast('Customer quotation PDF opened.');
+}
+
+function printInternalQuotationOnly() {
+  const data = buildQuotationDataFromForm();
+  if (!data) return;
+  printInternalQuotationDocument(data);
+  toast('Internal quotation PDF opened.');
+}
+
+function generateQuotation(e) {
+  e.preventDefault();
+  const data = buildQuotationDataFromForm();
+  if (!data) return;
+  printDocument(data);
+  printInternalQuotationDocument(data);
+  saveQuotationRecord(data);
+  toast('Quotation saved. Customer and internal PDFs opened.');
 }
 
 
