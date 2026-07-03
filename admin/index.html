@@ -72,8 +72,8 @@
         <div class="stat-grid dashboard-only-cards">
           <article class="stat-card"><span>Total Items</span><b id="statItems">0</b><small>Calculator saved records</small></article>
           <article class="stat-card"><span>Total Orders</span><b id="statOrders">0</b><small>Bills / invoice records</small></article>
-          <article class="stat-card"><span>Total Profit</span><b id="statProfit">Rs 0.00</b><small>Orders price minus cost</small></article>
-          <article class="stat-card"><span>Budget Balance</span><b id="statBudgetBalance">Rs 0.00</b><small>Budget income minus expenses</small></article>
+          <article class="stat-card"><span>Total Profit</span><b id="statProfit">Rs 0</b><small>Orders price minus cost</small></article>
+          <article class="stat-card"><span>Budget Balance</span><b id="statBudgetBalance">Rs 0</b><small>Budget income minus expenses</small></article>
         </div>
         <div class="admin-grid two dashboard-workflow-grid">
           <article class="admin-card">
@@ -114,6 +114,8 @@
             <div class="form-grid admin-form-grid four">
               <label class="field"><span>Customer optional</span><input id="calcCustomer" type="text" placeholder="Customer name"></label>
               <label class="field"><span>Model Name</span><input id="calcModel" type="text" placeholder="Model / item name"></label>
+              <label class="field"><span>Material Type</span><input id="calcMaterial" type="text" value="PLA+" placeholder="PLA+"></label>
+              <label class="field"><span>Color</span><input id="calcColor" type="text" value="Black" placeholder="Black"></label>
               <label class="field"><span>Days</span><input id="calcDays" type="text" inputmode="decimal" step="1" min="0" value="0"></label>
               <label class="field"><span>Hours</span><input id="calcHours" type="text" inputmode="decimal" step="1" min="0" value="0"></label>
               <label class="field"><span>Minutes</span><input id="calcMinutes" type="text" inputmode="decimal" step="1" min="0" value="0"></label>
@@ -134,11 +136,11 @@
           <div class="metric-grid" id="calcResults">
             <div><span>Length</span><b id="outLength">0.00 m</b></div>
             <div><span>Weight</span><b id="outWeight">0.00 g</b></div>
-            <div><span>Electricity</span><b id="outElectricity">Rs 0.00</b></div>
-            <div><span>Filament</span><b id="outFilament">Rs 0.00</b></div>
-            <div><span>Machine Dep.</span><b id="outDepreciation">Rs 0.00</b></div>
-            <div><span>Total Cost</span><b id="outTotalCost">Rs 0.00</b></div>
-            <div class="final"><span>Final Price</span><b id="outFinalPrice">Rs 0.00</b></div>
+            <div><span>Electricity</span><b id="outElectricity">Rs 0</b></div>
+            <div><span>Filament</span><b id="outFilament">Rs 0</b></div>
+            <div><span>Machine Dep.</span><b id="outDepreciation">Rs 0</b></div>
+            <div><span>Total Cost</span><b id="outTotalCost">Rs 0</b></div>
+            <div class="final"><span>Final Price</span><b id="outFinalPrice">Rs 0</b></div>
           </div>
         </div>
       </section>
@@ -155,9 +157,9 @@
             <div class="summary-grid quote-summary-grid">
               <div><span>Total Weight</span><b id="quoteTotalWeight">0.00 g</b></div>
               <div><span>Total Printing Time</span><b id="quoteTotalTime">0m</b></div>
-              <div><span>Quotation Total</span><b id="quoteGrandTotal">Rs 0.00</b></div>
+              <div><span>Quotation Total</span><b id="quoteGrandTotal">Rs 0</b></div>
             </div>
-            <div class="table-wrap line-editor"><table><thead><tr><th>Model</th><th>Qty</th><th>Unit Price</th><th>Layer</th><th>Walls</th><th>Infill</th><th>Weight</th><th>Print Time</th><th></th></tr></thead><tbody id="quoteItemsBody"></tbody></table></div>
+            <div class="table-wrap line-editor"><table><thead><tr><th>Model</th><th>Material</th><th>Color</th><th>Qty</th><th>Unit Price</th><th>Layer</th><th>Walls</th><th>Infill</th><th>Weight</th><th>Print Time</th><th></th></tr></thead><tbody id="quoteItemsBody"></tbody></table></div>
             <div class="admin-actions"><button class="btn ghost" id="addQuoteRowBtn" type="button">+ Add Item</button><button class="btn ghost" id="addCalcQuoteBtn" type="button">Add Calculator Result</button><button class="btn ghost" id="resetQuoteBtn" type="button">Reset Quotation</button></div>
             <label class="field"><span>Notes optional</span><textarea id="quoteNotes" rows="3" placeholder="Validity, delivery, conditions..."></textarea></label>
             <div class="admin-actions quotation-pdf-actions">
@@ -181,14 +183,14 @@
               <label class="field"><span>Paid Method</span><input id="billPaidMethod" type="text" placeholder="Cash / Bank / Online"></label>
               <label class="field"><span>Advance Paid Rs</span><input id="billAdvance" type="text" inputmode="decimal" step="0.01" value="0"></label>
             </div>
-            <div class="table-wrap line-editor"><table><thead><tr><th>Model</th><th>Qty</th><th>Unit Price</th><th>Discount</th><th>Cost Rs</th><th>Layer</th><th>Walls</th><th>Infill</th><th></th></tr></thead><tbody id="billItemsBody"></tbody></table></div>
+            <div class="table-wrap line-editor"><table><thead><tr><th>Model</th><th>Material</th><th>Color</th><th>Qty</th><th>Unit Price</th><th>Discount</th><th>Cost Rs</th><th>Layer</th><th>Walls</th><th>Infill</th><th></th></tr></thead><tbody id="billItemsBody"></tbody></table></div>
             <div class="admin-actions"><button class="btn ghost" id="addBillRowBtn" type="button">+ Add Item</button><button class="btn ghost" id="addCalcBillBtn" type="button">Add Calculator Result</button><button class="btn ghost" id="resetBillBtn" type="button">Reset Invoice</button></div>
             <label class="field"><span>Notes optional</span><textarea id="billNotes" rows="3" placeholder="Payment note, pickup note..."></textarea></label>
             <div class="summary-grid">
-              <div><span>Subtotal</span><b id="billSubtotal">Rs 0.00</b></div>
-              <div><span>Discount</span><b id="billDiscount">Rs 0.00</b></div>
-              <div><span>Total</span><b id="billGrandTotal">Rs 0.00</b></div>
-              <div><span>Balance Due</span><b id="billBalance">Rs 0.00</b></div>
+              <div><span>Subtotal</span><b id="billSubtotal">Rs 0</b></div>
+              <div><span>Discount</span><b id="billDiscount">Rs 0</b></div>
+              <div><span>Total</span><b id="billGrandTotal">Rs 0</b></div>
+              <div><span>Balance Due</span><b id="billBalance">Rs 0</b></div>
             </div>
             <button class="btn primary" type="submit">Generate Invoice PDF / Print</button>
           </form>
@@ -240,7 +242,7 @@
           </article>
           <article class="admin-card budget-record-card">
             <div class="card-title"><span class="eyebrow">Budget Records</span><h2>Income and expenses</h2></div>
-            <div class="summary-grid budget-summary-grid"><div class="budget-summary-card income-card"><span>Income</span><b id="budgetIncome">Rs 0.00</b></div><div class="budget-summary-card expense-card"><span>Expenses</span><b id="budgetExpense">Rs 0.00</b></div><div class="budget-summary-card balance-card"><span>Balance</span><b id="budgetBalance">Rs 0.00</b></div></div>
+            <div class="summary-grid budget-summary-grid"><div class="budget-summary-card income-card"><span>Income</span><b id="budgetIncome">Rs 0</b></div><div class="budget-summary-card expense-card"><span>Expenses</span><b id="budgetExpense">Rs 0</b></div><div class="budget-summary-card balance-card"><span>Balance</span><b id="budgetBalance">Rs 0</b></div></div>
             <div class="table-wrap compact-table budget-table-wrap"><table><thead><tr><th>ID</th><th>Date</th><th>Type</th><th>Category</th><th>Description</th><th>Amount</th><th>Source</th><th>Actions</th></tr></thead><tbody id="budgetBody"></tbody></table></div>
           </article>
         </div>

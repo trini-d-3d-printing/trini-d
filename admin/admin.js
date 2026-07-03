@@ -9,8 +9,13 @@ const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
 const todayISO = () => new Date().toISOString().slice(0, 10);
 const nowStamp = () => new Date().toISOString().replace('T', ' ').slice(0, 19);
-const money = value => `Rs ${Number(value || 0).toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`;
 const num = value => Number(String(value ?? '').replace(/,/g, '').trim()) || 0;
+const ceilCurrency = value => {
+  const n = num(value);
+  if (!Number.isFinite(n) || n === 0) return 0;
+  return n > 0 ? Math.ceil(n) : -Math.ceil(Math.abs(n));
+};
+const money = value => `Rs ${ceilCurrency(value).toLocaleString('en-LK', { maximumFractionDigits: 0 })}`;
 const safe = value => String(value ?? '').replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
 const id = prefix => `${prefix}-${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}-${Math.floor(Math.random() * 900 + 100)}`;
 const docId = prefix => {
@@ -81,7 +86,22 @@ function loadDb() {
   }
 }
 
+function normalizeMaterialColorDefaults() {
+  ['itemRecords','orders','invoices','quotes','customRecords'].forEach(key => {
+    (db[key] || []).forEach(row => {
+      if (!row.materialType && !row.material) row.materialType = 'PLA+';
+      if (!row.color) row.color = 'Black';
+      (row.items || []).forEach(item => {
+        if (!item.materialType && !item.material) item.materialType = 'PLA+';
+        if (!item.color) item.color = 'Black';
+      });
+    });
+  });
+}
+normalizeMaterialColorDefaults();
+
 function saveDb(options = {}) {
+  normalizeMaterialColorDefaults();
   const { render = true, cloud = true } = options;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
   if (render) renderAll();
@@ -383,13 +403,19 @@ function calculatePrice(showMessage = false) {
     const lengthCm = crossArea * values.rho > 0 ? weightG / (crossArea * values.rho) : 0;
     lengthM = lengthCm / 100;
   }
-  const filamentCost = weightG * (values.P / 1000);
-  const electricityCost = (values.W * T / 3600000) * values.R;
-  const machineDepreciation = (values.Cp / values.H) * (T / 3600);
-  const upsCost = values.Hups > 0 ? (values.Cups / values.Hups) * (T / 3600) : 0;
-  const totalCost = (filamentCost + electricityCost + machineDepreciation + upsCost) / (1 - values.F);
+  const rawFilamentCost = weightG * (values.P / 1000);
+  const rawElectricityCost = (values.W * T / 3600000) * values.R;
+  const rawMachineDepreciation = (values.Cp / values.H) * (T / 3600);
+  const rawUpsCost = values.Hups > 0 ? (values.Cups / values.Hups) * (T / 3600) : 0;
+  const rawTotalCost = (rawFilamentCost + rawElectricityCost + rawMachineDepreciation + rawUpsCost) / (1 - values.F);
   const marginRate = num($('#margin').value) / 100;
-  const finalPrice = totalCost * (1 + marginRate);
+  const rawFinalPrice = rawTotalCost * (1 + marginRate);
+  const filamentCost = ceilCurrency(rawFilamentCost);
+  const electricityCost = ceilCurrency(rawElectricityCost);
+  const machineDepreciation = ceilCurrency(rawMachineDepreciation);
+  const upsCost = ceilCurrency(rawUpsCost);
+  const totalCost = ceilCurrency(rawTotalCost);
+  const finalPrice = ceilCurrency(rawFinalPrice);
 
   saveCalculatorConfigFromForm({ render: false });
 
@@ -398,6 +424,8 @@ function calculatePrice(showMessage = false) {
     createdAt: nowStamp(),
     customer: $('#calcCustomer').value.trim(),
     model: $('#calcModel').value.trim() || '3D Printed Item',
+    materialType: ($('#calcMaterial')?.value || 'PLA+').trim() || 'PLA+',
+    color: ($('#calcColor')?.value || 'Black').trim() || 'Black',
     status: $('#calcStatus').value,
     printTimeMinutes: minutes,
     lengthM,
@@ -424,10 +452,12 @@ function calculatePrice(showMessage = false) {
 
 function resetJob() {
   ['calcCustomer', 'calcModel', 'calcDays', 'calcHours', 'calcMinutes', 'lengthM', 'weightG', 'margin'].forEach(idName => { const el = $(`#${idName}`); if (el) el.value = idName === 'margin' ? '0' : ''; });
+  if ($('#calcMaterial')) $('#calcMaterial').value = 'PLA+';
+  if ($('#calcColor')) $('#calcColor').value = 'Black';
   $('#calcDays').value = '0'; $('#calcHours').value = '0'; $('#calcMinutes').value = '0';
   lastCalc = null;
   ['outLength', 'outWeight'].forEach(key => $(`#${key}`).textContent = key === 'outLength' ? '0.00 m' : '0.00 g');
-  ['outElectricity', 'outFilament', 'outDepreciation', 'outTotalCost', 'outFinalPrice'].forEach(key => $(`#${key}`).textContent = 'Rs 0.00');
+  ['outElectricity', 'outFilament', 'outDepreciation', 'outTotalCost', 'outFinalPrice'].forEach(key => $(`#${key}`).textContent = 'Rs 0');
 }
 
 function saveCalculatorResultToItems() {
@@ -469,6 +499,8 @@ function addCalculatorResultToLine(type) {
     }
     addQuoteRow({
       model: result.model,
+      materialType: result.materialType || 'PLA+',
+      color: result.color || 'Black',
       qty: 1,
       unit: result.price,
       weight: `${result.weightG.toFixed(2)} g`,
@@ -483,7 +515,7 @@ function addCalculatorResultToLine(type) {
     saveQuoteDraft();
   }
   if (type === 'bill') {
-    addBillRow({ model: result.model, qty: 1, unit: result.price, discount: 0, cost: result.totalCost });
+    addBillRow({ model: result.model, materialType: result.materialType || 'PLA+', color: result.color || 'Black', qty: 1, unit: result.price, discount: 0, cost: result.totalCost });
     saveBillDraft();
   }
   toast(`Calculator result added to ${type === 'bill' ? 'Bill' : 'Quotation'}`);
@@ -507,6 +539,8 @@ function addBillRow(data = {}) {
   tr.dataset.calcKey = data.calcKey || '';
   tr.innerHTML = `
     <td>${lineInput(data.model || '', 'model-input')}</td>
+    <td>${lineInput(data.materialType || data.material || 'PLA+', 'material-input')}</td>
+    <td>${lineInput(data.color || 'Black', 'color-input')}</td>
     <td>${lineInput(data.qty || 1, 'qty-input', 'number')}</td>
     <td>${lineInput(data.unitPrice ?? data.unit ?? '', 'unit-input', 'number')}</td>
     <td>${lineInput(data.discount || 0, 'discount-input', 'number')}</td>
@@ -522,13 +556,15 @@ function addBillRow(data = {}) {
 function addQuoteRow(data = {}) {
   const tr = document.createElement('tr');
   tr.dataset.calcKey = data.calcKey || '';
-  tr.dataset.totalCost = data.totalCost || '';
-  tr.dataset.electricityCost = data.electricityCost || '';
-  tr.dataset.filamentCost = data.filamentCost || '';
-  tr.dataset.machineDepreciation = data.machineDepreciation || '';
-  tr.dataset.profit = data.profit || '';
+  tr.dataset.totalCost = data.totalCost ? ceilCurrency(data.totalCost) : '';
+  tr.dataset.electricityCost = data.electricityCost ? ceilCurrency(data.electricityCost) : '';
+  tr.dataset.filamentCost = data.filamentCost ? ceilCurrency(data.filamentCost) : '';
+  tr.dataset.machineDepreciation = data.machineDepreciation ? ceilCurrency(data.machineDepreciation) : '';
+  tr.dataset.profit = data.profit ? ceilCurrency(data.profit) : '';
   tr.innerHTML = `
     <td>${lineInput(data.model || '', 'model-input')}</td>
+    <td>${lineInput(data.materialType || data.material || 'PLA+', 'material-input')}</td>
+    <td>${lineInput(data.color || 'Black', 'color-input')}</td>
     <td>${lineInput(data.qty || 1, 'qty-input', 'number')}</td>
     <td>${lineInput(data.unitPrice ?? data.unit ?? '', 'unit-input', 'number')}</td>
     <td>${lineInput(data.layer || '0.2', 'layer-input')}</td>
@@ -544,10 +580,12 @@ function addQuoteRow(data = {}) {
 function collectBillItems() {
   return $$('#billItemsBody tr').map(tr => ({
     model: $('.model-input', tr).value.trim(),
+    materialType: ($('.material-input', tr)?.value || 'PLA+').trim() || 'PLA+',
+    color: ($('.color-input', tr)?.value || 'Black').trim() || 'Black',
     qty: num($('.qty-input', tr).value) || 1,
-    unitPrice: num($('.unit-input', tr).value),
-    discount: num($('.discount-input', tr).value),
-    cost: num($('.cost-input', tr).value),
+    unitPrice: ceilCurrency($('.unit-input', tr).value),
+    discount: ceilCurrency($('.discount-input', tr).value),
+    cost: ceilCurrency($('.cost-input', tr).value),
     layer: $('.layer-input', tr).value.trim(),
     walls: $('.walls-input', tr).value.trim(),
     infill: $('.infill-input', tr).value.trim(),
@@ -558,29 +596,31 @@ function collectBillItems() {
 function collectQuoteItems() {
   return $$('#quoteItemsBody tr').map(tr => ({
     model: $('.model-input', tr).value.trim(),
+    materialType: ($('.material-input', tr)?.value || 'PLA+').trim() || 'PLA+',
+    color: ($('.color-input', tr)?.value || 'Black').trim() || 'Black',
     qty: num($('.qty-input', tr).value) || 1,
-    unitPrice: num($('.unit-input', tr).value),
+    unitPrice: ceilCurrency($('.unit-input', tr).value),
     layer: $('.layer-input', tr).value.trim(),
     walls: $('.walls-input', tr).value.trim(),
     infill: $('.infill-input', tr).value.trim(),
     weight: $('.weight-input', tr).value.trim(),
     printTime: $('.time-input', tr).value.trim(),
     calcKey: tr.dataset.calcKey || '',
-    totalCost: num(tr.dataset.totalCost),
-    electricityCost: num(tr.dataset.electricityCost),
-    filamentCost: num(tr.dataset.filamentCost),
-    machineDepreciation: num(tr.dataset.machineDepreciation),
-    profit: num(tr.dataset.profit)
+    totalCost: ceilCurrency(tr.dataset.totalCost),
+    electricityCost: ceilCurrency(tr.dataset.electricityCost),
+    filamentCost: ceilCurrency(tr.dataset.filamentCost),
+    machineDepreciation: ceilCurrency(tr.dataset.machineDepreciation),
+    profit: ceilCurrency(tr.dataset.profit)
   })).filter(item => item.model);
 }
 
 function billTotals(items = collectBillItems()) {
-  const subtotal = items.reduce((sum, item) => sum + (item.qty * item.unitPrice), 0);
-  const discount = items.reduce((sum, item) => sum + item.discount, 0);
-  const cost = items.reduce((sum, item) => sum + item.cost, 0);
-  const total = Math.max(0, subtotal - discount);
-  const advance = num($('#billAdvance').value);
-  return { subtotal, discount, total, advance, balance: Math.max(0, total - advance), cost, profit: total - cost };
+  const subtotal = ceilCurrency(items.reduce((sum, item) => sum + (item.qty * item.unitPrice), 0));
+  const discount = ceilCurrency(items.reduce((sum, item) => sum + item.discount, 0));
+  const cost = ceilCurrency(items.reduce((sum, item) => sum + item.cost, 0));
+  const total = ceilCurrency(Math.max(0, subtotal - discount));
+  const advance = ceilCurrency($('#billAdvance').value);
+  return { subtotal, discount, total, advance, balance: ceilCurrency(Math.max(0, total - advance)), cost, profit: ceilCurrency(total - cost) };
 }
 
 
@@ -609,7 +649,7 @@ function parsePrintTimeMinutes(value) {
 }
 
 function quoteTotals(items = collectQuoteItems()) {
-  const total = items.reduce((sum, item) => sum + ((num(item.qty) || 1) * num(item.unitPrice)), 0);
+  const total = ceilCurrency(items.reduce((sum, item) => sum + ((num(item.qty) || 1) * ceilCurrency(item.unitPrice)), 0));
   const weightG = items.reduce((sum, item) => sum + ((num(item.qty) || 1) * parseWeightG(item.weight)), 0);
   const printMinutes = items.reduce((sum, item) => sum + ((num(item.qty) || 1) * parsePrintTimeMinutes(item.printTime)), 0);
   return { total, weightG, printMinutes };
@@ -858,7 +898,7 @@ function generateQuotation(e) {
 
 function printInternalQuotationDocument(data) {
   const formatNumber = v => Number(v || 0).toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const formatMoneyDot = v => `Rs. ${formatNumber(v)}`;
+  const formatMoneyDot = v => `Rs. ${ceilCurrency(v).toLocaleString('en-LK', { maximumFractionDigits: 0 })}`;
   const percentText = v => Number.isFinite(Number(v)) ? `${formatNumber(v)}%` : '0.00%';
   const itemWeightG = item => parseWeightG(item.weight || item.weightG || item.filamentWeightG || '');
   const itemPrintMinutes = item => parsePrintTimeMinutes(item.printTime || item.print_time || item.printTimeText || '');
@@ -922,7 +962,7 @@ function printInternalQuotationDocument(data) {
     const infill = item.infill ? `${safe(item.infill)}${String(item.infill).includes('%') ? '' : '%'}` : '';
     return `<tr>
       <td>${index + 1}</td>
-      <td>${safe(item.model || '')}</td>
+      <td>${safe(item.model || '')}<br><small>${safe([item.materialType || item.material || 'PLA+', item.color || 'Black'].filter(Boolean).join(' / '))}</small></td>
       <td>${item.qty}</td>
       <td>${formatMoneyDot(item.unitPrice)}</td>
       <td>${layer}</td>
@@ -934,7 +974,7 @@ function printInternalQuotationDocument(data) {
 
   const internalRows = items.map((item, index) => `<tr>
       <td>${index + 1}</td>
-      <td>${safe(item.model || '')}</td>
+      <td>${safe(item.model || '')}<br><small>${safe([item.materialType || item.material || 'PLA+', item.color || 'Black'].filter(Boolean).join(' / '))}</small></td>
       <td>${safe(item.printTime || minutesLabel(item.printMinutes))}</td>
       <td>${safe(item.weight || (item.weightG ? `${formatNumber(item.weightG)} g` : ''))}</td>
       <td>${formatMoneyDot(item.lineElectricity)}</td>
@@ -962,14 +1002,16 @@ function printDocument(data) {
   const filePrefix = isInvoice ? 'Invoice' : 'Quote';
   const thanks = isInvoice ? 'Thank you for your business!' : 'Thank you for choosing Trini-D!';
   const formatNumber = v => Number(v || 0).toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
-  const formatMoneyDot = v => `Rs. ${formatNumber(v)}`;
+  const formatMoneyDot = v => `Rs. ${ceilCurrency(v).toLocaleString('en-LK', { maximumFractionDigits: 0 })}`;
   const normalizedLayer = item => item.layer ? `${safe(item.layer)}${String(item.layer).toLowerCase().includes('mm') ? '' : ' mm'}` : '';
   const normalizedInfill = item => item.infill ? `${safe(item.infill)}${String(item.infill).includes('%') ? '' : '%'}` : '';
   const preparedItems = (data.items || []).map(item => ({
     ...item,
     qty: Number(item.qty || 1) || 1,
-    unitPrice: Number(item.unitPrice ?? item.unit ?? 0) || 0,
-    discount: Number(item.discount || 0) || 0,
+    unitPrice: ceilCurrency(item.unitPrice ?? item.unit ?? 0),
+    discount: ceilCurrency(item.discount || 0),
+    materialType: safe(item.materialType || item.material || 'PLA+'),
+    color: safe(item.color || 'Black'),
     layer: normalizedLayer(item),
     walls: safe(item.walls || ''),
     infill: normalizedInfill(item),
@@ -989,18 +1031,21 @@ function printDocument(data) {
     if (!isInvoice) {
       const weight = item.weight || '';
       const printTime = item.printTime || '';
-      const extra = weight || printTime ? 16 : 0;
+      const matColor = [item.materialType, item.color].filter(Boolean).join(' / ');
+      const extra = weight || printTime || matColor ? 16 : 0;
       return {
         height: 22 + extra,
         html: top => {
-          const sub = weight || printTime ? `<div class="quote-sub" style="top:22pt">${weight ? `⚖ ${safe(weight)}` : ''}${weight && printTime ? '   |   ' : ''}${printTime ? `⏱ ${safe(printTime)}` : ''}</div>` : '';
-          return `<div class="doc-row quote-row ${rowClass}" style="top:${top}pt;height:${22 + extra}pt"><div class="td q-model">${safe(item.model).slice(0, 30)}</div><div class="td q-qty">${item.qty}</div><div class="td q-unit">${formatNumber(item.unitPrice)}</div><div class="td q-layer">${item.layer}</div><div class="td q-walls">${item.walls}</div><div class="td q-infill">${item.infill}</div><div class="td q-total">${formatMoneyDot(lineTotal)}</div>${sub}</div>`;
+          const subParts = []; if (matColor) subParts.push(`Material: ${safe(matColor)}`); if (weight) subParts.push(`⚖ ${safe(weight)}`); if (printTime) subParts.push(`⏱ ${safe(printTime)}`);
+          const sub = subParts.length ? `<div class="quote-sub" style="top:22pt">${subParts.join('   |   ')}</div>` : '';
+          return `<div class="doc-row quote-row ${rowClass}" style="top:${top}pt;height:${22 + extra}pt"><div class="td q-model">${safe(item.model).slice(0, 30)}</div><div class="td q-qty">${item.qty}</div><div class="td q-unit">${formatMoneyDot(item.unitPrice)}</div><div class="td q-layer">${item.layer}</div><div class="td q-walls">${item.walls}</div><div class="td q-infill">${item.infill}</div><div class="td q-total">${formatMoneyDot(lineTotal)}</div>${sub}</div>`;
         }
       };
     }
     const hasSpecs = item.layer || item.walls || item.infill;
     const rowHeight = 22 + (hasSpecs ? 14 : 0);
     const specParts = [];
+    if (item.materialType || item.color) specParts.push(`Material: ${[item.materialType, item.color].filter(Boolean).join(' / ')}`);
     if (item.layer) specParts.push(`Layer: ${item.layer}`);
     if (item.walls) specParts.push(`Walls: ${item.walls}`);
     if (item.infill) specParts.push(`Infill: ${item.infill}`);
@@ -1147,13 +1192,15 @@ function editItemRecord(itemId) {
   if (!item) return;
   item.customer = editValue('Customer name', item.customer);
   item.model = editValue('Model / item name', item.model);
+  item.materialType = editValue('Material type', item.materialType || item.material || 'PLA+');
+  item.color = editValue('Color', item.color || 'Black');
   const status = editValue('Status: Success or Failed', item.status || 'Success');
   item.status = /^f/i.test(status) ? 'Failed' : 'Success';
   item.printTimeMinutes = editNumberValue('Print time in minutes', item.printTimeMinutes);
   item.weightG = editNumberValue('Weight in grams', item.weightG);
-  item.totalCost = editNumberValue('Total cost Rs', item.totalCost);
-  item.price = item.status === 'Failed' ? 0 : editNumberValue('Selling price Rs', item.price);
-  item.profit = num(item.price) - num(item.totalCost);
+  item.totalCost = ceilCurrency(editNumberValue('Total cost Rs', item.totalCost));
+  item.price = item.status === 'Failed' ? 0 : ceilCurrency(editNumberValue('Selling price Rs', item.price));
+  item.profit = ceilCurrency(num(item.price) - num(item.totalCost));
   item.calcFingerprint = calcFingerprint(item);
   saveDb();
   toast('Item record updated');
@@ -1169,10 +1216,10 @@ function editOrderRecord(orderId) {
   const paid = editValue('Paid status: Paid or Unpaid', normalizePaidStatus(order.paidStatus) || 'Unpaid');
   order.paidStatus = /^p/i.test(paid) ? 'Paid' : 'Unpaid';
   order.paidMethod = editValue('Paid method', order.paidMethod || '');
-  order.advancePayment = editNumberValue('Advance payment Rs', order.advancePayment);
-  order.totalCost = editNumberValue('Total cost Rs', order.totalCost);
-  order.price = editNumberValue('Price Rs', order.price);
-  order.profit = num(order.price) - num(order.totalCost);
+  order.advancePayment = ceilCurrency(editNumberValue('Advance payment Rs', order.advancePayment));
+  order.totalCost = ceilCurrency(editNumberValue('Total cost Rs', order.totalCost));
+  order.price = ceilCurrency(editNumberValue('Price Rs', order.price));
+  order.profit = ceilCurrency(num(order.price) - num(order.totalCost));
   saveDb();
   toast('Order record updated');
 }
@@ -1253,9 +1300,9 @@ function itemToBillData(item) {
   return {
     model: item.model || item.model_name || '3D print item',
     qty: 1,
-    unit: round2(item.price),
+    unit: ceilCurrency(item.price),
     discount: 0,
-    cost: round2(item.totalCost),
+    cost: ceilCurrency(item.totalCost),
     layer: item.layer || item.layerHeight || '',
     walls: item.walls || item.wallLoops || '',
     infill: item.infill || ''
@@ -1263,8 +1310,8 @@ function itemToBillData(item) {
 }
 
 function itemToOrderData(item, overrideOrderId = null) {
-  const price = round2(item.price);
-  const totalCost = round2(item.totalCost);
+  const price = ceilCurrency(item.price);
+  const totalCost = ceilCurrency(item.totalCost);
   return {
     id: id('ORDER'),
     createdAt: nowStamp(),
@@ -1300,8 +1347,8 @@ function addSelectedItemsToOrders() {
   const duplicateCount = items.filter(item => db.orders.some(o => Array.isArray(o.sourceItemIds) && o.sourceItemIds.includes(item.id))).length;
   if (duplicateCount && !confirm(`${duplicateCount} selected item(s) are already linked to Orders. Continue and create a new combined order?`)) return;
   const orderId = docId('INV');
-  const price = items.reduce((sum, item) => sum + round2(item.price), 0);
-  const totalCost = items.reduce((sum, item) => sum + round2(item.totalCost), 0);
+  const price = ceilCurrency(items.reduce((sum, item) => sum + ceilCurrency(item.price), 0));
+  const totalCost = ceilCurrency(items.reduce((sum, item) => sum + ceilCurrency(item.totalCost), 0));
   const customer = items.map(i => i.customer).find(Boolean) || 'Customer';
   db.orders.unshift({
     id: id('ORDER'),
@@ -1365,8 +1412,8 @@ function renderDatabaseTable() {
   let body = '';
   if (activeDbTable === 'items') {
     rows = db.itemRecords.filter(include);
-    headers = '<tr><th>✓</th><th>Date</th><th>Customer</th><th>Model</th><th>Status</th><th>Print Time</th><th>Weight</th><th>Cost</th><th>Price</th><th>Profit</th><th>Actions</th></tr>';
-    body = rows.map(r => `<tr><td><input class="item-select" type="checkbox" value="${r.id}" ${selectedItemIds.has(r.id) ? 'checked' : ''}></td><td>${safe(r.datePrinted || r.createdAt)}</td><td>${safe(r.customer)}</td><td>${safe(r.model)}</td><td><span class="pill-status ${String(r.status).toLowerCase()}">${safe(r.status)}</span></td><td>${minutesLabel(r.printTimeMinutes)}</td><td>${Number(r.weightG || 0).toFixed(2)} g</td><td>${money(r.totalCost)}</td><td>${money(r.price)}</td><td>${money(r.profit)}</td><td class="row-actions"><button class="small-btn" data-edit-item="${r.id}">Edit</button><button class="small-btn" data-item-to-order="${r.id}">Order</button><button class="small-btn" data-item-to-bill="${r.id}">Bill</button><button class="small-btn" data-delete="${r.id}" data-kind="item">Delete</button></td></tr>`).join('');
+    headers = '<tr><th>✓</th><th>Date</th><th>Customer</th><th>Model</th><th>Material</th><th>Color</th><th>Status</th><th>Print Time</th><th>Weight</th><th>Cost</th><th>Price</th><th>Profit</th><th>Actions</th></tr>';
+    body = rows.map(r => `<tr><td><input class="item-select" type="checkbox" value="${r.id}" ${selectedItemIds.has(r.id) ? 'checked' : ''}></td><td>${safe(r.datePrinted || r.createdAt)}</td><td>${safe(r.customer)}</td><td>${safe(r.model)}</td><td>${safe(r.materialType || r.material || 'PLA+')}</td><td>${safe(r.color || 'Black')}</td><td><span class="pill-status ${String(r.status).toLowerCase()}">${safe(r.status)}</span></td><td>${minutesLabel(r.printTimeMinutes)}</td><td>${Number(r.weightG || 0).toFixed(2)} g</td><td>${money(r.totalCost)}</td><td>${money(r.price)}</td><td>${money(r.profit)}</td><td class="row-actions"><button class="small-btn" data-edit-item="${r.id}">Edit</button><button class="small-btn" data-item-to-order="${r.id}">Order</button><button class="small-btn" data-item-to-bill="${r.id}">Bill</button><button class="small-btn" data-delete="${r.id}" data-kind="item">Delete</button></td></tr>`).join('');
   }
   if (activeDbTable === 'orders') {
     rows = db.orders.filter(include);
