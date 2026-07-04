@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
   <meta name="robots" content="noindex,nofollow" />
   <title>Admin Dashboard | Trini-D 3D Printing</title>
+  <script>try{document.documentElement.setAttribute('data-theme',localStorage.getItem('trinid-admin-theme')||'dark')}catch(e){}</script>
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
@@ -62,6 +63,7 @@
           <h1>Admin Dashboard</h1>
         </div>
         <div class="admin-top-actions">
+          <button class="btn ghost admin-theme-toggle" id="adminThemeToggle" type="button" aria-label="Switch color mode"><span class="theme-icon">☀️</span><span class="theme-text">Light</span></button>
           <span class="cloud-status" id="cloudStatus">Cloud: connecting...</span>
           <button class="btn ghost" id="saveSnapshotBtn" type="button">Export JSON</button>
           <button class="btn primary" data-section-jump="calculator" type="button">New Price</button>

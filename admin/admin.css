@@ -183,3 +183,107 @@ input[type="number"]::-webkit-inner-spin-button {
 
 .quotation-pdf-actions { margin-top: 12px; flex-wrap: wrap; }
 .quotation-pdf-actions .btn { min-width: 190px; }
+
+
+/* v23: Admin light/dark mode. Dark keeps the original Trini-D look; light uses soft gray glass surfaces. */
+:root[data-theme="light"]{
+  color-scheme:light;
+  --admin-bg:#eef1f5;
+  --admin-card:#f8f9fb;
+  --admin-card-2:#eceff3;
+  --admin-line:rgba(183,133,18,.32);
+  --admin-line-soft:rgba(31,41,55,.13);
+  --admin-text:#171a1f;
+  --admin-muted:#657080;
+  --admin-gold:#d99608;
+  --admin-gold-2:#f1b82d;
+  --admin-green:#168a4b;
+  --admin-red:#c84343;
+  --admin-blue:#3478c8;
+}
+:root[data-theme="light"] .admin-body{
+  background:
+    radial-gradient(circle at 14% 0%,rgba(241,184,45,.24),transparent 28%),
+    radial-gradient(circle at 92% 8%,rgba(255,255,255,.94),transparent 24%),
+    linear-gradient(135deg,#e8ebef 0%,#f7f8fa 46%,#dde2e8 100%);
+}
+:root[data-theme="light"] .admin-sidebar{
+  background:rgba(244,246,249,.84);
+  border-right-color:rgba(31,41,55,.12);
+  box-shadow:12px 0 42px rgba(58,66,78,.08);
+}
+:root[data-theme="light"] .login-card,
+:root[data-theme="light"] .admin-card{
+  background:linear-gradient(145deg,rgba(255,255,255,.92),rgba(235,239,244,.78));
+  border-color:rgba(31,41,55,.12);
+  box-shadow:0 22px 70px rgba(53,63,76,.15),inset 0 1px 0 rgba(255,255,255,.9);
+  backdrop-filter:blur(20px);
+}
+:root[data-theme="light"] .admin-side-card{
+  background:linear-gradient(135deg,rgba(241,184,45,.20),rgba(255,255,255,.66));
+}
+:root[data-theme="light"] .admin-nav-link:hover,
+:root[data-theme="light"] .admin-nav-link.active{
+  background:rgba(217,150,8,.12);
+}
+:root[data-theme="light"] .field input,
+:root[data-theme="light"] .field select,
+:root[data-theme="light"] .field textarea,
+:root[data-theme="light"] .database-toolbar input,
+:root[data-theme="light"] .custom-actions input,
+:root[data-theme="light"] .custom-actions select,
+:root[data-theme="light"] .line-editor input,
+:root[data-theme="light"] .line-editor select,
+:root[data-theme="light"] .order-paid-select{
+  background:rgba(255,255,255,.78);
+  color:var(--admin-text);
+  border-color:rgba(31,41,55,.16);
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.92);
+}
+:root[data-theme="light"] .field select option,
+:root[data-theme="light"] .order-paid-select option{color:#171a1f;background:#fff}
+:root[data-theme="light"] .metric-grid div,
+:root[data-theme="light"] .summary-grid div,
+:root[data-theme="light"] .summary-box,
+:root[data-theme="light"] .table-wrap,
+:root[data-theme="light"] .activity-item,
+:root[data-theme="light"] .mini-process .step-card{
+  background:rgba(255,255,255,.60);
+  border-color:rgba(31,41,55,.12);
+}
+:root[data-theme="light"] th{
+  background:#e3e7ec;
+  color:#a96f00;
+}
+:root[data-theme="light"] td{color:#20242b}
+:root[data-theme="light"] tbody tr:hover{background:rgba(217,150,8,.08)}
+:root[data-theme="light"] .stat-card,
+:root[data-theme="light"] .db-summary-card{
+  background:linear-gradient(145deg,rgba(255,255,255,.88),rgba(226,231,237,.80))!important;
+  box-shadow:0 18px 48px rgba(53,63,76,.13),inset 0 1px 0 rgba(255,255,255,.95)!important;
+}
+:root[data-theme="light"] .stat-card span,
+:root[data-theme="light"] .db-summary-card span{color:#657080!important}
+:root[data-theme="light"] .db-summary-card.unpaid-card{
+  background:linear-gradient(145deg,rgba(255,232,232,.95),rgba(240,226,228,.86))!important;
+}
+:root[data-theme="light"] .quote-summary-grid div{
+  background:linear-gradient(145deg,rgba(255,255,255,.9),rgba(227,232,238,.8));
+}
+:root[data-theme="light"] .budget-summary-card.income-card{
+  background:linear-gradient(145deg,rgba(220,248,230,.95),rgba(233,241,236,.88))!important;
+}
+:root[data-theme="light"] .budget-summary-card.expense-card{
+  background:linear-gradient(145deg,rgba(255,230,230,.95),rgba(240,230,232,.88))!important;
+}
+:root[data-theme="light"] .budget-summary-card span{color:#657080!important}
+:root[data-theme="light"] .budget-summary-card b{color:#20242b!important}
+:root[data-theme="light"] .small-btn,
+:root[data-theme="light"] .cloud-status{
+  background:rgba(255,255,255,.66);
+  color:#4f5967;
+  border-color:rgba(31,41,55,.13);
+}
+:root[data-theme="light"] code{background:rgba(31,41,55,.07)}
+.admin-theme-toggle{min-width:112px;justify-content:center}
+.admin-theme-toggle .theme-icon{font-size:1rem}

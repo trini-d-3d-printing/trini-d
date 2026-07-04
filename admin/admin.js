@@ -17,6 +17,14 @@ const ceilCurrency = value => {
 };
 const money = value => `Rs ${ceilCurrency(value).toLocaleString('en-LK', { maximumFractionDigits: 0 })}`;
 const safe = value => String(value ?? '').replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj || {}, key);
+const materialText = obj => {
+  if (hasOwn(obj, 'materialType')) return String(obj.materialType ?? '').trim();
+  if (hasOwn(obj, 'material')) return String(obj.material ?? '').trim();
+  return 'PLA+';
+};
+const colorText = obj => hasOwn(obj, 'color') ? String(obj.color ?? '').trim() : 'Black';
+const materialColorText = obj => [materialText(obj), colorText(obj)].filter(Boolean).join(' / ');
 const id = prefix => `${prefix}-${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}-${Math.floor(Math.random() * 900 + 100)}`;
 const docId = prefix => {
   const d = new Date();
@@ -89,11 +97,11 @@ function loadDb() {
 function normalizeMaterialColorDefaults() {
   ['itemRecords','orders','invoices','quotes','customRecords'].forEach(key => {
     (db[key] || []).forEach(row => {
-      if (!row.materialType && !row.material) row.materialType = 'PLA+';
-      if (!row.color) row.color = 'Black';
+      if (!hasOwn(row, 'materialType') && !hasOwn(row, 'material')) row.materialType = 'PLA+';
+      if (!hasOwn(row, 'color')) row.color = 'Black';
       (row.items || []).forEach(item => {
-        if (!item.materialType && !item.material) item.materialType = 'PLA+';
-        if (!item.color) item.color = 'Black';
+        if (!hasOwn(item, 'materialType') && !hasOwn(item, 'material')) item.materialType = 'PLA+';
+        if (!hasOwn(item, 'color')) item.color = 'Black';
       });
     });
   });
@@ -117,6 +125,31 @@ function setCloudStatus(message, state = '') {
   if (!el) return;
   el.textContent = message;
   el.dataset.state = state;
+}
+
+const ADMIN_THEME_KEY = 'trinid-admin-theme';
+function applyAdminTheme(theme) {
+  const selected = theme === 'light' ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', selected);
+  try { localStorage.setItem(ADMIN_THEME_KEY, selected); } catch (e) {}
+  const btn = $('#adminThemeToggle');
+  if (btn) {
+    const isDark = selected === 'dark';
+    const icon = $('.theme-icon', btn);
+    const text = $('.theme-text', btn);
+    if (icon) icon.textContent = isDark ? '☀️' : '🌙';
+    if (text) text.textContent = isDark ? 'Light' : 'Dark';
+    btn.setAttribute('aria-label', isDark ? 'Switch to light mode' : 'Switch to dark mode');
+  }
+}
+function initAdminTheme() {
+  let saved = 'dark';
+  try { saved = localStorage.getItem(ADMIN_THEME_KEY) || 'dark'; } catch (e) {}
+  applyAdminTheme(saved);
+  $('#adminThemeToggle')?.addEventListener('click', () => {
+    const current = document.documentElement.getAttribute('data-theme') || 'dark';
+    applyAdminTheme(current === 'dark' ? 'light' : 'dark');
+  });
 }
 
 function initFirebase() {
@@ -424,8 +457,8 @@ function calculatePrice(showMessage = false) {
     createdAt: nowStamp(),
     customer: $('#calcCustomer').value.trim(),
     model: $('#calcModel').value.trim() || '3D Printed Item',
-    materialType: ($('#calcMaterial')?.value || 'PLA+').trim() || 'PLA+',
-    color: ($('#calcColor')?.value || 'Black').trim() || 'Black',
+    materialType: $('#calcMaterial') ? $('#calcMaterial').value.trim() : 'PLA+',
+    color: $('#calcColor') ? $('#calcColor').value.trim() : 'Black',
     status: $('#calcStatus').value,
     printTimeMinutes: minutes,
     lengthM,
@@ -499,8 +532,8 @@ function addCalculatorResultToLine(type) {
     }
     addQuoteRow({
       model: result.model,
-      materialType: result.materialType || 'PLA+',
-      color: result.color || 'Black',
+      materialType: hasOwn(result, 'materialType') ? result.materialType : 'PLA+',
+      color: hasOwn(result, 'color') ? result.color : 'Black',
       qty: 1,
       unit: result.price,
       weight: `${result.weightG.toFixed(2)} g`,
@@ -515,7 +548,7 @@ function addCalculatorResultToLine(type) {
     saveQuoteDraft();
   }
   if (type === 'bill') {
-    addBillRow({ model: result.model, materialType: result.materialType || 'PLA+', color: result.color || 'Black', qty: 1, unit: result.price, discount: 0, cost: result.totalCost });
+    addBillRow({ model: result.model, materialType: hasOwn(result, 'materialType') ? result.materialType : 'PLA+', color: hasOwn(result, 'color') ? result.color : 'Black', qty: 1, unit: result.price, discount: 0, cost: result.totalCost });
     saveBillDraft();
   }
   toast(`Calculator result added to ${type === 'bill' ? 'Bill' : 'Quotation'}`);
@@ -539,8 +572,8 @@ function addBillRow(data = {}) {
   tr.dataset.calcKey = data.calcKey || '';
   tr.innerHTML = `
     <td>${lineInput(data.model || '', 'model-input')}</td>
-    <td>${lineInput(data.materialType || data.material || 'PLA+', 'material-input')}</td>
-    <td>${lineInput(data.color || 'Black', 'color-input')}</td>
+    <td>${lineInput(materialText(data), 'material-input')}</td>
+    <td>${lineInput(colorText(data), 'color-input')}</td>
     <td>${lineInput(data.qty || 1, 'qty-input', 'number')}</td>
     <td>${lineInput(data.unitPrice ?? data.unit ?? '', 'unit-input', 'number')}</td>
     <td>${lineInput(data.discount || 0, 'discount-input', 'number')}</td>
@@ -563,8 +596,8 @@ function addQuoteRow(data = {}) {
   tr.dataset.profit = data.profit ? ceilCurrency(data.profit) : '';
   tr.innerHTML = `
     <td>${lineInput(data.model || '', 'model-input')}</td>
-    <td>${lineInput(data.materialType || data.material || 'PLA+', 'material-input')}</td>
-    <td>${lineInput(data.color || 'Black', 'color-input')}</td>
+    <td>${lineInput(materialText(data), 'material-input')}</td>
+    <td>${lineInput(colorText(data), 'color-input')}</td>
     <td>${lineInput(data.qty || 1, 'qty-input', 'number')}</td>
     <td>${lineInput(data.unitPrice ?? data.unit ?? '', 'unit-input', 'number')}</td>
     <td>${lineInput(data.layer || '0.2', 'layer-input')}</td>
@@ -580,8 +613,8 @@ function addQuoteRow(data = {}) {
 function collectBillItems() {
   return $$('#billItemsBody tr').map(tr => ({
     model: $('.model-input', tr).value.trim(),
-    materialType: ($('.material-input', tr)?.value || 'PLA+').trim() || 'PLA+',
-    color: ($('.color-input', tr)?.value || 'Black').trim() || 'Black',
+    materialType: $('.material-input', tr) ? $('.material-input', tr).value.trim() : 'PLA+',
+    color: $('.color-input', tr) ? $('.color-input', tr).value.trim() : 'Black',
     qty: num($('.qty-input', tr).value) || 1,
     unitPrice: ceilCurrency($('.unit-input', tr).value),
     discount: ceilCurrency($('.discount-input', tr).value),
@@ -596,8 +629,8 @@ function collectBillItems() {
 function collectQuoteItems() {
   return $$('#quoteItemsBody tr').map(tr => ({
     model: $('.model-input', tr).value.trim(),
-    materialType: ($('.material-input', tr)?.value || 'PLA+').trim() || 'PLA+',
-    color: ($('.color-input', tr)?.value || 'Black').trim() || 'Black',
+    materialType: $('.material-input', tr) ? $('.material-input', tr).value.trim() : 'PLA+',
+    color: $('.color-input', tr) ? $('.color-input', tr).value.trim() : 'Black',
     qty: num($('.qty-input', tr).value) || 1,
     unitPrice: ceilCurrency($('.unit-input', tr).value),
     layer: $('.layer-input', tr).value.trim(),
@@ -962,7 +995,7 @@ function printInternalQuotationDocument(data) {
     const infill = item.infill ? `${safe(item.infill)}${String(item.infill).includes('%') ? '' : '%'}` : '';
     return `<tr>
       <td>${index + 1}</td>
-      <td>${safe(item.model || '')}<br><small>${safe([item.materialType || item.material || 'PLA+', item.color || 'Black'].filter(Boolean).join(' / '))}</small></td>
+      <td>${safe(item.model || '')}${materialColorText(item) ? `<br><small>${safe(materialColorText(item))}</small>` : ''}</td>
       <td>${item.qty}</td>
       <td>${formatMoneyDot(item.unitPrice)}</td>
       <td>${layer}</td>
@@ -974,7 +1007,7 @@ function printInternalQuotationDocument(data) {
 
   const internalRows = items.map((item, index) => `<tr>
       <td>${index + 1}</td>
-      <td>${safe(item.model || '')}<br><small>${safe([item.materialType || item.material || 'PLA+', item.color || 'Black'].filter(Boolean).join(' / '))}</small></td>
+      <td>${safe(item.model || '')}${materialColorText(item) ? `<br><small>${safe(materialColorText(item))}</small>` : ''}</td>
       <td>${safe(item.printTime || minutesLabel(item.printMinutes))}</td>
       <td>${safe(item.weight || (item.weightG ? `${formatNumber(item.weightG)} g` : ''))}</td>
       <td>${formatMoneyDot(item.lineElectricity)}</td>
@@ -1010,8 +1043,8 @@ function printDocument(data) {
     qty: Number(item.qty || 1) || 1,
     unitPrice: ceilCurrency(item.unitPrice ?? item.unit ?? 0),
     discount: ceilCurrency(item.discount || 0),
-    materialType: safe(item.materialType || item.material || 'PLA+'),
-    color: safe(item.color || 'Black'),
+    materialType: safe(materialText(item)),
+    color: safe(colorText(item)),
     layer: normalizedLayer(item),
     walls: safe(item.walls || ''),
     infill: normalizedInfill(item),
@@ -1192,8 +1225,8 @@ function editItemRecord(itemId) {
   if (!item) return;
   item.customer = editValue('Customer name', item.customer);
   item.model = editValue('Model / item name', item.model);
-  item.materialType = editValue('Material type', item.materialType || item.material || 'PLA+');
-  item.color = editValue('Color', item.color || 'Black');
+  item.materialType = editValue('Material type', materialText(item));
+  item.color = editValue('Color', colorText(item));
   const status = editValue('Status: Success or Failed', item.status || 'Success');
   item.status = /^f/i.test(status) ? 'Failed' : 'Success';
   item.printTimeMinutes = editNumberValue('Print time in minutes', item.printTimeMinutes);
@@ -1413,7 +1446,7 @@ function renderDatabaseTable() {
   if (activeDbTable === 'items') {
     rows = db.itemRecords.filter(include);
     headers = '<tr><th>✓</th><th>Date</th><th>Customer</th><th>Model</th><th>Material</th><th>Color</th><th>Status</th><th>Print Time</th><th>Weight</th><th>Cost</th><th>Price</th><th>Profit</th><th>Actions</th></tr>';
-    body = rows.map(r => `<tr><td><input class="item-select" type="checkbox" value="${r.id}" ${selectedItemIds.has(r.id) ? 'checked' : ''}></td><td>${safe(r.datePrinted || r.createdAt)}</td><td>${safe(r.customer)}</td><td>${safe(r.model)}</td><td>${safe(r.materialType || r.material || 'PLA+')}</td><td>${safe(r.color || 'Black')}</td><td><span class="pill-status ${String(r.status).toLowerCase()}">${safe(r.status)}</span></td><td>${minutesLabel(r.printTimeMinutes)}</td><td>${Number(r.weightG || 0).toFixed(2)} g</td><td>${money(r.totalCost)}</td><td>${money(r.price)}</td><td>${money(r.profit)}</td><td class="row-actions"><button class="small-btn" data-edit-item="${r.id}">Edit</button><button class="small-btn" data-item-to-order="${r.id}">Order</button><button class="small-btn" data-item-to-bill="${r.id}">Bill</button><button class="small-btn" data-delete="${r.id}" data-kind="item">Delete</button></td></tr>`).join('');
+    body = rows.map(r => `<tr><td><input class="item-select" type="checkbox" value="${r.id}" ${selectedItemIds.has(r.id) ? 'checked' : ''}></td><td>${safe(r.datePrinted || r.createdAt)}</td><td>${safe(r.customer)}</td><td>${safe(r.model)}</td><td>${safe(materialText(r))}</td><td>${safe(colorText(r))}</td><td><span class="pill-status ${String(r.status).toLowerCase()}">${safe(r.status)}</span></td><td>${minutesLabel(r.printTimeMinutes)}</td><td>${Number(r.weightG || 0).toFixed(2)} g</td><td>${money(r.totalCost)}</td><td>${money(r.price)}</td><td>${money(r.profit)}</td><td class="row-actions"><button class="small-btn" data-edit-item="${r.id}">Edit</button><button class="small-btn" data-item-to-order="${r.id}">Order</button><button class="small-btn" data-item-to-bill="${r.id}">Bill</button><button class="small-btn" data-delete="${r.id}" data-kind="item">Delete</button></td></tr>`).join('');
   }
   if (activeDbTable === 'orders') {
     rows = db.orders.filter(include);
@@ -1871,6 +1904,7 @@ function renderAll() {
 }
 
 function init() {
+  initAdminTheme();
   initFirebase();
   initAuth();
   initNavigation();
