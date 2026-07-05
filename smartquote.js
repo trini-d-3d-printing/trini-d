@@ -64,6 +64,25 @@ window.addEventListener('resize',resizeViewer);
 
 const nextPaint = () => new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
 
+
+function resetSmartQuoteIdleState(){
+  // Fresh page load/refresh must show the upload area, not an analysis spinner.
+  if(loading){
+    loading.hidden=true;
+    const label=loading.querySelector('b');
+    if(label) label.textContent='Analyzing model…';
+  }
+  if(!currentFile && !modelData){
+    uploadZone.hidden=false;
+    canvas.hidden=true;
+    resetViewBtn.disabled=true;
+    uploadAnotherBtn.disabled=true;
+    sendToQuoteBtn.disabled=true;
+    const name=$('#viewerFileName');
+    if(name) name.textContent='No model loaded';
+  }
+}
+
 function setAnalysisStatus(message){
   const label = loading?.querySelector('b');
   if(label) label.textContent = message;
@@ -227,4 +246,4 @@ sendToQuoteBtn.addEventListener('click',()=>{
   location.href='quotation.html?from=smartquote';
 });
 
-updateMaterialCard(); colorSelect.value='Black'; syncOrbColor(); initViewer(); calculateEstimate();
+resetSmartQuoteIdleState(); updateMaterialCard(); colorSelect.value='Black'; syncOrbColor(); initViewer(); calculateEstimate();

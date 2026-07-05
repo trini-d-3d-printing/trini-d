@@ -19,3 +19,6 @@
 @media(max-width:1180px){.smartquote-layout{grid-template-columns:1fr 1.8fr}.sq-settings-card{grid-column:1/-1}.sq-fields{grid-template-columns:repeat(5,1fr)}.sq-settings-note{margin-top:18px}.sq-estimate-grid{grid-template-columns:repeat(2,1fr)}.sq-estimate-grid .sq-price{grid-column:span 2}}
 @media(max-width:820px){.smartquote-layout{grid-template-columns:1fr}.sq-settings-card{grid-column:auto}.sq-fields{grid-template-columns:1fr 1fr}.sq-viewer-card{min-height:540px}.sq-viewer{min-height:390px}.sq-model-stats{grid-template-columns:1fr 1fr}.sq-model-stats div:nth-child(2){border-right:0}.sq-model-stats div:nth-child(-n+2){border-bottom:1px solid var(--line)}}
 @media(max-width:560px){.sq-card,.sq-estimate-panel{border-radius:22px}.sq-fields{grid-template-columns:1fr}.sq-viewer-toolbar{align-items:flex-start}.sq-upload-zone{width:86%;min-height:235px}.sq-model-stats{grid-template-columns:1fr}.sq-model-stats div{border-right:0;border-bottom:1px solid var(--line)!important}.sq-estimate-grid{grid-template-columns:1fr}.sq-estimate-grid .sq-price{grid-column:auto}.sq-estimate-header{flex-direction:column}.sq-estimate-actions .btn{width:100%}}
+
+/* v26: keep analysis overlay truly hidden until an STL upload starts. */
+.sq-loading[hidden]{display:none!important}
