@@ -30,7 +30,7 @@ const QUALITY = {
   high:     { layer: 0.16, timeFactor: 1.22, flow: 5.0 },
   ultra:    { layer: 0.12, timeFactor: 1.55, flow: 4.4 }
 };
-const MODEL_COLORS = { Black:0x202329, White:0xe7e9ed, Gray:0x7a808b, Gold:0xd6a11d, Red:0xc63a3a, Blue:0x315dca, Green:0x3f8d55, Transparent:0x9fcbd0 };
+const MODEL_COLORS = { Black:0x4a4f59, White:0xe7e9ed, Gray:0x7a808b, Gold:0xd6a11d, Red:0xc63a3a, Blue:0x315dca, Green:0x3f8d55, Transparent:0x9fcbd0 };
 const PRICING = { powerW:150, electricityPerKWh:70, printerCost:140000, printerLifeHours:2000, profitMargin:75, filamentDiameterMm:1.75 };
 
 let renderer, scene, camera, controls, mesh;
@@ -59,7 +59,15 @@ function initViewer(){
   const animate=()=>{ requestAnimationFrame(animate); controls.update(); renderer.render(scene,camera); };
   animate(); resizeViewer();
 }
-function resizeViewer(){ if(!renderer) return; const r=viewer.getBoundingClientRect(); const w=Math.max(1,r.width), h=Math.max(1,r.height); renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix(); }
+function resizeViewer(){
+  if(!renderer || !viewer) return;
+  const r=viewer.getBoundingClientRect();
+  const w=Math.max(320,Math.round(r.width||viewer.clientWidth||720));
+  const h=Math.max(320,Math.round(r.height||viewer.clientHeight||455));
+  renderer.setSize(w,h,false);
+  camera.aspect=w/h;
+  camera.updateProjectionMatrix();
+}
 window.addEventListener('resize',resizeViewer);
 
 const nextPaint = () => new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
@@ -131,14 +139,53 @@ async function geometryStats(geometry){
 }
 
 function fitCamera(){
-  if(!mesh) return;
-  const box=new THREE.Box3().setFromObject(mesh); const size=box.getSize(new THREE.Vector3()); const center=box.getCenter(new THREE.Vector3()); const maxDim=Math.max(size.x,size.y,size.z,1);
-  const dist=maxDim/Math.tan(THREE.MathUtils.degToRad(camera.fov/2))*0.72;
-  camera.position.copy(center).add(new THREE.Vector3(dist*.85,dist*.65,dist)); camera.near=Math.max(.01,maxDim/1000); camera.far=Math.max(2000,maxDim*30); camera.updateProjectionMatrix();
-  controls.target.copy(center); controls.update();
+  if(!mesh || !camera || !controls) return;
+  mesh.updateMatrixWorld(true);
+  const box=new THREE.Box3().setFromObject(mesh);
+  if(box.isEmpty()) return;
+  const size=box.getSize(new THREE.Vector3());
+  const center=box.getCenter(new THREE.Vector3());
+  const maxDim=Math.max(size.x,size.y,size.z,1);
+
+  // Frame the complete model with extra margin. This is intentionally more
+  // conservative than the old camera distance so flat/tall STL files are not
+  // clipped or placed behind the near plane.
+  const fov=THREE.MathUtils.degToRad(camera.fov);
+  const fitHeightDistance=maxDim/(2*Math.tan(fov/2));
+  const fitWidthDistance=fitHeightDistance/Math.max(camera.aspect,0.2);
+  const distance=Math.max(fitHeightDistance,fitWidthDistance)*2.15;
+
+  camera.near=Math.max(0.01,maxDim/10000);
+  camera.far=Math.max(5000,maxDim*100);
+  camera.position.set(
+    center.x+distance*0.72,
+    center.y+distance*0.55,
+    center.z+distance
+  );
+  camera.lookAt(center);
+  camera.updateProjectionMatrix();
+  controls.target.copy(center);
+  controls.minDistance=Math.max(maxDim*0.05,0.01);
+  controls.maxDistance=Math.max(maxDim*50,1000);
+  controls.update();
+  renderer.render(scene,camera);
 }
 
 function applyModelColor(){ if(!mesh) return; const color=MODEL_COLORS[colorSelect.value] ?? 0x8a909b; mesh.material.color.setHex(color); mesh.material.roughness=.48; mesh.material.metalness=colorSelect.value==='Gold'?.22:.05; }
+
+async function showPreviewCanvas(){
+  // Explicitly remove the hidden state before measuring the viewer. Some
+  // browsers can keep a WebGL canvas at a stale 1x1/zero-like drawing buffer
+  // when it was initialized while hidden.
+  uploadZone.hidden=true;
+  canvas.hidden=false;
+  canvas.removeAttribute('hidden');
+  canvas.style.display='block';
+  await nextPaint();
+  resizeViewer();
+  await nextPaint();
+}
+
 
 async function loadSTL(file){
   if(!file) return;
@@ -165,18 +212,39 @@ async function loadSTL(file){
     const stats=await geometryStats(geometry);
     if(!isFinite(stats.volumeMm3) || stats.volumeMm3<=0) throw new Error('Could not calculate a closed model volume. The STL may be open or damaged.');
     if(mesh){ scene.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose(); }
-    mesh=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({color:MODEL_COLORS[colorSelect.value]||0x202329,roughness:.48,metalness:.05,side:THREE.DoubleSide}));
-    mesh.rotation.x=-Math.PI/2; scene.add(mesh);
-    currentFile=file; modelData={...stats,fileName:file.name,fileSize:file.size};
-    uploadZone.hidden=true; canvas.hidden=false; resetViewBtn.disabled=false; uploadAnotherBtn.disabled=false; sendToQuoteBtn.disabled=false;
+    mesh=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({
+      color:MODEL_COLORS[colorSelect.value]||0x4a4f59,
+      roughness:.42,
+      metalness:.04,
+      side:THREE.DoubleSide,
+      flatShading:false
+    }));
+    mesh.rotation.x=-Math.PI/2;
+    mesh.castShadow=false;
+    mesh.receiveShadow=false;
+    scene.add(mesh);
+    mesh.updateMatrixWorld(true);
+
+    currentFile=file;
+    modelData={...stats,fileName:file.name,fileSize:file.size};
+
+    // Make the canvas visible and give WebGL a real drawing-buffer size BEFORE
+    // fitting the camera. This fixes blank previews after a successful upload.
+    await showPreviewCanvas();
+    resetViewBtn.disabled=false;
+    uploadAnotherBtn.disabled=false;
+    sendToQuoteBtn.disabled=false;
     $('#viewerFileName').textContent=file.name;
     $('#statDimensions').textContent=`${fmt(stats.size.x,1)} × ${fmt(stats.size.y,1)} × ${fmt(stats.size.z,1)} mm`;
     $('#statTriangles').textContent=Math.round(stats.triangles).toLocaleString();
     $('#statVolume').textContent=`${fmt(stats.volumeMm3/1000,2)} cm³`;
     $('#statFileSize').textContent=fmtBytes(file.size);
-    fitCamera(); applyModelColor(); calculateEstimate();
+    applyModelColor();
+    fitCamera();
+    renderer.render(scene,camera);
+    calculateEstimate();
   }catch(err){ console.error(err); alert(`Could not analyze this STL. ${err.message||''}`); }
-  finally{ loading.hidden=true; setAnalysisStatus('Analyzing model…'); resizeViewer(); }
+  finally{ loading.hidden=true; setAnalysisStatus('Analyzing model…'); if(mesh){ resizeViewer(); fitCamera(); renderer.render(scene,camera); } }
 }
 
 function calculateEstimate(){
@@ -246,4 +314,12 @@ sendToQuoteBtn.addEventListener('click',()=>{
   location.href='quotation.html?from=smartquote';
 });
 
-resetSmartQuoteIdleState(); updateMaterialCard(); colorSelect.value='Black'; syncOrbColor(); initViewer(); calculateEstimate();
+canvas.addEventListener('webglcontextlost',e=>{ e.preventDefault(); console.warn('Smart Quote WebGL context lost.'); });
+canvas.addEventListener('webglcontextrestored',()=>{ resizeViewer(); if(mesh) fitCamera(); });
+
+resetSmartQuoteIdleState();
+updateMaterialCard();
+colorSelect.value='Black';
+syncOrbColor();
+initViewer();
+calculateEstimate();

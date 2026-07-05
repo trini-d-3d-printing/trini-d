@@ -22,3 +22,6 @@
 
 /* v26: keep analysis overlay truly hidden until an STL upload starts. */
 .sq-loading[hidden]{display:none!important}
+
+/* v27: reliable STL preview canvas visibility after upload. */
+#stlCanvas:not([hidden]){display:block!important;visibility:visible!important;opacity:1!important;}
