@@ -81,6 +81,7 @@ function resetSmartQuoteIdleState(){
     if(label) label.textContent='Analyzing model…';
   }
   if(!currentFile && !modelData){
+    uploadZone.style.removeProperty('display');
     uploadZone.hidden=false;
     canvas.hidden=true;
     resetViewBtn.disabled=true;
@@ -178,6 +179,7 @@ async function showPreviewCanvas(){
   // browsers can keep a WebGL canvas at a stale 1x1/zero-like drawing buffer
   // when it was initialized while hidden.
   uploadZone.hidden=true;
+  uploadZone.style.display='none';
   canvas.hidden=false;
   canvas.removeAttribute('hidden');
   canvas.style.display='block';
