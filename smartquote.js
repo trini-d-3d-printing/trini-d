@@ -62,19 +62,53 @@ function initViewer(){
 function resizeViewer(){ if(!renderer) return; const r=viewer.getBoundingClientRect(); const w=Math.max(1,r.width), h=Math.max(1,r.height); renderer.setSize(w,h,false); camera.aspect=w/h; camera.updateProjectionMatrix(); }
 window.addEventListener('resize',resizeViewer);
 
-function geometryStats(geometry){
+const nextPaint = () => new Promise(resolve => requestAnimationFrame(() => setTimeout(resolve, 0)));
+
+function setAnalysisStatus(message){
+  const label = loading?.querySelector('b');
+  if(label) label.textContent = message;
+}
+
+async function geometryStats(geometry){
   geometry.computeBoundingBox();
   const box=geometry.boundingBox;
   const size=new THREE.Vector3(); box.getSize(size);
   const pos=geometry.attributes.position.array;
+  const triangles=Math.floor(pos.length/9);
   let signedVolume=0, surfaceArea=0;
-  const a=new THREE.Vector3(),b=new THREE.Vector3(),c=new THREE.Vector3(),ab=new THREE.Vector3(),ac=new THREE.Vector3(),cross=new THREE.Vector3();
-  for(let i=0;i<pos.length;i+=9){
-    a.set(pos[i],pos[i+1],pos[i+2]); b.set(pos[i+3],pos[i+4],pos[i+5]); c.set(pos[i+6],pos[i+7],pos[i+8]);
-    signedVolume += a.dot(cross.crossVectors(b,c))/6;
-    ab.subVectors(b,a); ac.subVectors(c,a); cross.crossVectors(ab,ac); surfaceArea += cross.length()/2;
+
+  // Process large STL files in chunks. The old implementation created several
+  // THREE.Vector3 objects for every triangle and blocked the browser UI on
+  // high-triangle-count models. Raw numeric math is much faster and yielding
+  // between chunks keeps the loading indicator and page responsive.
+  const chunkTriangles=25000;
+  for(let t=0;t<triangles;t++){
+    const i=t*9;
+    const ax=pos[i], ay=pos[i+1], az=pos[i+2];
+    const bx=pos[i+3], by=pos[i+4], bz=pos[i+5];
+    const cx=pos[i+6], cy=pos[i+7], cz=pos[i+8];
+
+    // Signed tetrahedron volume: dot(a, cross(b,c)) / 6.
+    const bxcx=by*cz-bz*cy;
+    const bxcy=bz*cx-bx*cz;
+    const bxcz=bx*cy-by*cx;
+    signedVolume += (ax*bxcx + ay*bxcy + az*bxcz)/6;
+
+    // Triangle area: |cross(b-a,c-a)| / 2.
+    const abx=bx-ax, aby=by-ay, abz=bz-az;
+    const acx=cx-ax, acy=cy-ay, acz=cz-az;
+    const crx=aby*acz-abz*acy;
+    const cry=abz*acx-abx*acz;
+    const crz=abx*acy-aby*acx;
+    surfaceArea += Math.hypot(crx,cry,crz)/2;
+
+    if((t+1)%chunkTriangles===0 && t+1<triangles){
+      const pct=Math.min(99,Math.round((t+1)/triangles*100));
+      setAnalysisStatus(`Analyzing model… ${pct}%`);
+      await nextPaint();
+    }
   }
-  return { size, volumeMm3:Math.abs(signedVolume), surfaceAreaMm2:surfaceArea, triangles:pos.length/9 };
+  return { size, volumeMm3:Math.abs(signedVolume), surfaceAreaMm2:surfaceArea, triangles };
 }
 
 function fitCamera(){
@@ -92,12 +126,24 @@ async function loadSTL(file){
   if(!file.name.toLowerCase().endsWith('.stl')) return alert('Please select a valid .STL file.');
   if(file.size>50*1024*1024) return alert('Maximum STL file size is 50 MB.');
   loading.hidden=false;
+  setAnalysisStatus('Reading STL file…');
+  await nextPaint();
   try{
     const buffer=await file.arrayBuffer();
+    setAnalysisStatus('Parsing STL geometry…');
+    await nextPaint();
     const geometry=new STLLoader().parse(buffer);
     if(!geometry.attributes.position || geometry.attributes.position.count<3) throw new Error('The STL contains no valid triangles.');
-    geometry.computeVertexNormals(); geometry.center();
-    const stats=geometryStats(geometry);
+
+    const triangleCount=Math.floor(geometry.attributes.position.count/3);
+    if(triangleCount>1500000) throw new Error(`This STL is extremely detailed (${triangleCount.toLocaleString()} triangles). Please simplify it below 1,500,000 triangles and try again.`);
+
+    // STLLoader normally provides facet normals already. Recomputing all normals
+    // for large files can freeze the browser, so only do it when they are absent.
+    if(!geometry.attributes.normal) geometry.computeVertexNormals();
+    geometry.center();
+    setAnalysisStatus('Analyzing model… 0%');
+    const stats=await geometryStats(geometry);
     if(!isFinite(stats.volumeMm3) || stats.volumeMm3<=0) throw new Error('Could not calculate a closed model volume. The STL may be open or damaged.');
     if(mesh){ scene.remove(mesh); mesh.geometry.dispose(); mesh.material.dispose(); }
     mesh=new THREE.Mesh(geometry,new THREE.MeshStandardMaterial({color:MODEL_COLORS[colorSelect.value]||0x202329,roughness:.48,metalness:.05,side:THREE.DoubleSide}));
@@ -111,7 +157,7 @@ async function loadSTL(file){
     $('#statFileSize').textContent=fmtBytes(file.size);
     fitCamera(); applyModelColor(); calculateEstimate();
   }catch(err){ console.error(err); alert(`Could not analyze this STL. ${err.message||''}`); }
-  finally{ loading.hidden=true; resizeViewer(); }
+  finally{ loading.hidden=true; setAnalysisStatus('Analyzing model…'); resizeViewer(); }
 }
 
 function calculateEstimate(){
