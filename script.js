@@ -163,3 +163,51 @@ slideshows.forEach(slideshow => {
   showSlide(currentIndex);
   startAutoPlay();
 });
+
+
+// Trini-D Smart Quote Stage 1 -> manual quotation handoff
+(function applySmartQuoteDraft(){
+  const form = document.querySelector('#quoteForm');
+  if (!form) return;
+  try {
+    const raw = localStorage.getItem('trinid-smartquote-draft');
+    if (!raw) return;
+    const d = JSON.parse(raw);
+    if (!d || !d.fileName) return;
+    const age = Date.now() - new Date(d.createdAt || 0).getTime();
+    if (!Number.isFinite(age) || age > 24 * 60 * 60 * 1000) return;
+    const material = form.querySelector('#material');
+    const qty = form.querySelector('#quantity');
+    const color = form.querySelector('#color');
+    const notes = form.querySelector('#notes');
+    const fileLabel = form.querySelector('#fileLabel');
+    if (material) {
+      const map = {'PLA+':'PLA / PLA+','PLA':'PLA / PLA+','PETG':'PETG','TPU':'TPU','ABS':'ABS'};
+      material.value = map[d.material] || material.value;
+    }
+    if (qty) qty.value = d.quantity || 1;
+    if (color) color.value = d.color || '';
+    if (fileLabel) fileLabel.textContent = `${d.fileName} · selected in Smart Quote`;
+    if (notes) {
+      const dims = d.dimensions || {};
+      const h = Math.floor((Number(d.printTimeMinutes)||0)/60);
+      const m = Math.round((Number(d.printTimeMinutes)||0)%60);
+      const summary = [
+        'Smart Quote preliminary estimate:',
+        `Model: ${d.fileName}`,
+        `Material / Color: ${d.material || ''}${d.color ? ' / ' + d.color : ''}`,
+        `Quality: ${d.quality || ''}`,
+        `Infill: ${d.infill || 0}%`,
+        `Quantity: ${d.quantity || 1}`,
+        `Dimensions: ${(Number(dims.x)||0).toFixed(1)} × ${(Number(dims.y)||0).toFixed(1)} × ${(Number(dims.z)||0).toFixed(1)} mm`,
+        `Estimated time: ${h}h ${m}m`,
+        `Estimated weight: ${(Number(d.weightG)||0).toFixed(2)} g`,
+        `Preliminary estimated price: Rs ${Math.ceil(Number(d.totalPrice)||0)}`,
+        'Final price to be confirmed after slicer review.'
+      ].join('\n');
+      notes.value = notes.value ? `${summary}\n\n${notes.value}` : summary;
+    }
+    const out = document.querySelector('#quoteOutput');
+    if (out) out.innerHTML = '<strong>Smart Quote imported.</strong><br>Your preliminary estimate details were added below. Please add your name and WhatsApp number, then prepare the request.';
+  } catch (err) { console.warn('Could not restore Smart Quote draft', err); }
+})();

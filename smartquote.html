@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="description" content="Upload an STL file, preview the 3D model and get a preliminary Trini-D 3D printing estimate." />
+  <title>Smart Quote | Trini-D 3D Printing</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css" />
+  <link rel="stylesheet" href="smartquote.css" />
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://cdn.jsdelivr.net/npm/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+</head>
+<body>
+<header class="site-header" id="top">
+  <div class="container nav">
+    <a class="brand" href="index.html" aria-label="Trini-D home">
+      <img src="assets/logo.jpg" class="brand-logo" alt="Trini-D logo" />
+      <span>Trini-D <small>3D PRINTING</small></span>
+    </a>
+    <nav class="nav-links" aria-label="Primary navigation"><a href="index.html" class="nav-link" data-nav>Home</a><a href="about.html" class="nav-link" data-nav>About</a><a href="services.html" class="nav-link" data-nav>Services</a><a href="smartquote.html" class="nav-link" data-nav>Smart Quote</a><a href="gallery.html" class="nav-link" data-nav>Gallery</a><a href="quotation.html" class="nav-link" data-nav>Quotation</a><a href="contact.html" class="nav-link" data-nav>Contact Us</a></nav>
+    <div class="nav-cta">
+      <a class="btn ghost hide-sm" href="tel:0719335411">Call</a>
+      <button class="theme-toggle" id="themeToggle" type="button" aria-label="Switch to dark mode" aria-pressed="false"><span class="theme-icon" aria-hidden="true">🌙</span><span class="theme-text">Dark</span></button>
+      <a class="btn primary" href="quotation.html">Get Quote</a>
+      <button class="menu-btn" id="menuBtn" type="button" aria-label="Open menu" aria-expanded="false">Menu</button>
+    </div>
+  </div>
+  <div class="mobile-menu" id="mobileMenu"><a href="index.html" data-nav>Home</a><a href="about.html" data-nav>About</a><a href="services.html" data-nav>Services</a><a href="smartquote.html" data-nav>Smart Quote</a><a href="gallery.html" data-nav>Gallery</a><a href="quotation.html" data-nav>Quotation</a><a href="contact.html" data-nav>Contact Us</a></div>
+</header>
+
+<main>
+  <section class="page-hero smartquote-hero">
+    <div class="container">
+      <div class="breadcrumb"><a href="index.html">Home</a> / Smart Quote</div>
+      <span class="eyebrow">STL Model Analyzer</span>
+      <h1>Upload. Preview. <span class="gold">Estimate.</span></h1>
+      <p class="lead">Upload an STL model to preview it in 3D, inspect dimensions, choose print settings and receive a preliminary browser estimate.</p>
+      <div class="smartquote-notice"><b>Stage 1:</b> this estimate is geometry-based. Final price is confirmed after real slicer review.</div>
+    </div>
+  </section>
+
+  <section class="section smartquote-section">
+    <div class="container smartquote-layout">
+      <aside class="sq-card sq-material-card">
+        <div class="sq-card-head"><span class="eyebrow">Material</span><h2 id="materialTitle">PLA+</h2></div>
+        <div class="material-orb" id="materialOrb" aria-hidden="true"><span>3D</span></div>
+        <p id="materialDescription">Reliable general-purpose material for prototypes, models, gifts and everyday functional parts.</p>
+        <div class="sq-spec-list">
+          <div><span>Density</span><b id="materialDensity">1.25 g/cm³</b></div>
+          <div><span>Price basis</span><b id="materialPrice">Rs 5,400/kg</b></div>
+          <div><span>Best for</span><b id="materialBestFor">General purpose</b></div>
+        </div>
+      </aside>
+
+      <section class="sq-card sq-viewer-card">
+        <div class="sq-viewer-toolbar">
+          <div><span class="eyebrow">3D Preview</span><b id="viewerFileName">No model loaded</b></div>
+          <button class="sq-mini-btn" id="resetViewBtn" type="button" disabled>Reset View</button>
+        </div>
+        <div class="sq-viewer" id="stlViewer">
+          <div class="sq-upload-zone" id="uploadZone" tabindex="0" role="button" aria-label="Upload STL file">
+            <div class="sq-upload-icon">⇧</div>
+            <h3>Drag your STL model here</h3>
+            <p>or <span class="gold">Browse</span></p>
+            <small>.STL files up to 50 MB</small>
+            <input id="stlFile" type="file" accept=".stl,model/stl" hidden />
+          </div>
+          <div class="sq-loading" id="sqLoading" hidden><span></span><b>Analyzing model…</b></div>
+          <canvas id="stlCanvas" hidden></canvas>
+        </div>
+        <div class="sq-model-stats" id="modelStats">
+          <div><span>Dimensions</span><b id="statDimensions">—</b></div>
+          <div><span>Triangles</span><b id="statTriangles">—</b></div>
+          <div><span>Solid Volume</span><b id="statVolume">—</b></div>
+          <div><span>File Size</span><b id="statFileSize">—</b></div>
+        </div>
+      </section>
+
+      <aside class="sq-card sq-settings-card">
+        <div class="sq-card-head"><span class="eyebrow">Print Settings</span><h2>Configure Estimate</h2></div>
+        <div class="sq-fields">
+          <label>Material Type
+            <select id="sqMaterial">
+              <option value="PLA+" selected>PLA+</option><option value="PLA">PLA</option><option value="PETG">PETG</option><option value="TPU">TPU</option><option value="ABS">ABS</option>
+            </select>
+          </label>
+          <label>Quality
+            <select id="sqQuality">
+              <option value="draft">Draft · 0.28 mm</option><option value="standard" selected>Standard · 0.20 mm</option><option value="high">High · 0.16 mm</option><option value="ultra">Ultra · 0.12 mm</option>
+            </select>
+          </label>
+          <label>Color
+            <select id="sqColor"></select>
+          </label>
+          <label>Quantity
+            <input id="sqQuantity" type="number" min="1" max="100" value="1" inputmode="numeric" />
+          </label>
+          <label class="sq-range-label"><span>Infill <b id="infillValue">20%</b></span>
+            <input id="sqInfill" type="range" min="5" max="100" step="5" value="20" />
+          </label>
+        </div>
+        <div class="sq-settings-note">The uploaded model orientation is used for this preliminary estimate. Supports and real printer motion are confirmed in the final slicer review.</div>
+      </aside>
+    </div>
+  </section>
+
+  <section class="section no-top">
+    <div class="container">
+      <div class="sq-estimate-panel" id="estimatePanel" aria-live="polite">
+        <div class="sq-estimate-header">
+          <div><span class="eyebrow">Preliminary Estimate</span><h2 id="estimateStatus">Upload an STL to calculate</h2></div>
+          <span class="sq-stage-badge">Browser Estimate</span>
+        </div>
+        <div class="sq-estimate-grid">
+          <div><span>Estimated Time</span><b id="estTime">—</b></div>
+          <div><span>Estimated Weight</span><b id="estWeight">—</b></div>
+          <div><span>Filament Length</span><b id="estLength">—</b></div>
+          <div><span>Layer Height</span><b id="estLayer">0.20 mm</b></div>
+          <div class="sq-price"><span>Estimated Price</span><b id="estPrice">Rs —</b><small id="estPriceUnit">Final quote after slicer review</small></div>
+        </div>
+        <div class="sq-estimate-actions">
+          <button class="btn primary" id="sendToQuoteBtn" type="button" disabled>Use in Quotation Request</button>
+          <button class="btn ghost" id="uploadAnotherBtn" type="button" disabled>Upload Another STL</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="section alt-section">
+    <div class="container split">
+      <div class="glass-panel">
+        <span class="eyebrow">How this Stage Works</span>
+        <h2>Fast geometry estimate now. Real slicing next.</h2>
+        <div class="check-list"><div>STL is analyzed only in your browser.</div><div>3D preview, dimensions, triangle count and volume are calculated locally.</div><div>Material, quality and infill adjust the preliminary estimate.</div><div>The final business quote is confirmed after slicer review.</div></div>
+      </div>
+      <div class="glass-panel">
+        <span class="eyebrow">Next Stage</span>
+        <h2>Automatic real slicer backend.</h2>
+        <p class="lead">The page is structured so a future Trini-D Quote API can replace the preliminary estimator with real printer-profile slicing without rebuilding this customer interface.</p>
+      </div>
+    </div>
+  </section>
+</main>
+
+<a class="floating-whatsapp" href="https://wa.me/94751656777" target="_blank" rel="noopener" aria-label="Chat on WhatsApp"><span>WhatsApp</span></a>
+<footer class="footer">
+  <div class="container footer-grid">
+    <div><a class="brand" href="index.html"><img src="assets/logo.jpg" class="brand-logo" alt="Trini-D logo"><span>Trini-D <small>3D PRINTING</small></span></a><p class="muted footer-text">Premium 3D printing for ready-made models. Upload an STL for a preliminary estimate or request a manual quotation.</p><div class="social-pills"><span>.STL</span><span>Smart Quote</span><span>WhatsApp</span></div></div>
+    <div><h3>Pages</h3><a href="index.html">Home</a><a href="about.html">About</a><a href="services.html">Services</a><a href="smartquote.html">Smart Quote</a><a href="gallery.html">Gallery</a><a href="quotation.html">Quotation</a><a href="contact.html">Contact Us</a></div>
+    <div><h3>Services</h3><a href="services.html#rapid">Rapid Prototyping</a><a href="services.html#parts">Functional Parts</a><a href="services.html#models">Display Models</a><a href="services.html#materials">PLA / PETG / TPU / ABS</a></div>
+    <div><h3>Contact</h3><a href="https://wa.me/94751656777" target="_blank" rel="noopener">WhatsApp: +94 75 16 56 777</a><a href="tel:0719335411">Anushka: 071 93 35 411</a><a href="tel:0785524561">Chamikara: 078 552 4561</a><a href="quotation.html" class="footer-quote">Request Quotation</a></div>
+  </div>
+  <div class="container footer-bottom"><span>© <span id="year"></span> Trini-D 3D Printing. All rights reserved.</span><span>Three Dimensions, Endless Possibilities.</span></div>
+</footer>
+<script src="script.js"></script>
+<script type="module" src="smartquote.js"></script>
+</body>
+</html>
