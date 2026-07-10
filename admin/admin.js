@@ -38,6 +38,109 @@ const prettyDate = value => {
 const round2 = value => Math.round(num(value) * 100) / 100;
 const CONFIG_KEYS = ['P', 'rho', 'd_mm', 'W', 'R', 'Cp', 'H', 'F', 'Cups', 'Hups'];
 
+// Material profile library for FDM/FFF filament pricing.
+// Densities and starter prices are editable defaults, not supplier quotes.
+// The selected profile owns the full Operational Base and drives every calculation.
+const MATERIAL_PROFILE_SPECS = [
+  ['PLA+', 1.25, 5400],
+  ['PLA', 1.24, 5000],
+  ['Tough PLA', 1.24, 6200],
+  ['Matte PLA', 1.24, 6000],
+  ['Silk PLA', 1.24, 6500],
+  ['High-Speed PLA', 1.24, 6500],
+  ['LW-PLA / Foaming PLA', 1.05, 8500],
+  ['Wood-Filled PLA', 1.15, 7500],
+  ['Metal-Filled PLA', 1.70, 11000],
+  ['PLA-CF', 1.30, 9500],
+  ['PLA-GF', 1.32, 9500],
+  ['PETG', 1.27, 6000],
+  ['High-Speed PETG', 1.27, 7000],
+  ['PETG-CF', 1.30, 10000],
+  ['PETG-GF', 1.35, 10000],
+  ['PCTG', 1.23, 8500],
+  ['CPE', 1.27, 8500],
+  ['CPE+', 1.20, 9500],
+  ['ABS', 1.04, 6000],
+  ['ABS+', 1.05, 6500],
+  ['ABS-CF', 1.10, 9500],
+  ['ASA', 1.07, 7000],
+  ['ASA-CF', 1.10, 10500],
+  ['HIPS', 1.04, 6500],
+  ['TPU 95A', 1.21, 8000],
+  ['TPU 85A', 1.18, 9000],
+  ['TPE', 1.15, 9000],
+  ['TPC', 1.20, 10000],
+  ['Nylon PA6', 1.13, 9000],
+  ['Nylon PA12', 1.01, 10000],
+  ['PA6-CF', 1.15, 14000],
+  ['PA12-CF', 1.06, 15000],
+  ['PA-GF', 1.20, 13000],
+  ['Polycarbonate (PC)', 1.20, 11000],
+  ['PC-ABS', 1.15, 11000],
+  ['PC-CF', 1.25, 15000],
+  ['Polypropylene (PP)', 0.90, 9000],
+  ['Polyethylene / HDPE', 0.95, 9000],
+  ['POM / Acetal', 1.41, 11000],
+  ['PMMA / Acrylic', 1.18, 10000],
+  ['PVA Support', 1.19, 12000],
+  ['BVOH Support', 1.14, 16000],
+  ['PPS', 1.35, 18000],
+  ['PPS-CF', 1.50, 23000],
+  ['PEI / ULTEM', 1.27, 30000],
+  ['PEEK', 1.30, 45000],
+  ['PEKK', 1.28, 45000],
+  ['PVDF', 1.78, 22000],
+  ['Custom', 1.24, 5400]
+];
+
+const MATERIAL_PROFILE_NAMES = MATERIAL_PROFILE_SPECS.map(row => row[0]);
+const MATERIAL_PROFILE_SPEC_MAP = Object.fromEntries(MATERIAL_PROFILE_SPECS.map(([name, rho, P]) => [name, { rho, P }]));
+
+function buildDefaultMaterialProfiles(baseConfig = null) {
+  const base = {
+    P: 7800, rho: 1.24, d_mm: 1.75, W: 120, R: 65,
+    Cp: 95000, H: 5000, F: 0.05, Cups: 0, Hups: 0,
+    ...(baseConfig || {})
+  };
+  return Object.fromEntries(MATERIAL_PROFILE_SPECS.map(([name, rho, P]) => [name, {
+    ...base,
+    P,
+    rho,
+    d_mm: base.d_mm || 1.75
+  }]));
+}
+
+function normalizeMaterialProfiles(target = db) {
+  if (!target || typeof target !== 'object') return target;
+  const legacyConfig = { ...defaultDb().config, ...(target.config || {}) };
+  const defaults = buildDefaultMaterialProfiles(legacyConfig);
+  const hadProfiles = target.materialProfiles && typeof target.materialProfiles === 'object' && !Array.isArray(target.materialProfiles);
+  const existing = hadProfiles ? target.materialProfiles : {};
+  target.materialProfiles = Object.fromEntries(MATERIAL_PROFILE_NAMES.map(name => [name, {
+    ...defaults[name],
+    ...(existing[name] || {})
+  }]));
+  // Migration: before material profiles existed, db.config was the user's only profile.
+  // Preserve it as PLA+ rather than overwriting the user's working calculator values.
+  if (!hadProfiles) target.materialProfiles['PLA+'] = { ...defaults['PLA+'], ...legacyConfig };
+  const selected = String(target.selectedMaterialProfile || 'PLA+');
+  target.selectedMaterialProfile = target.materialProfiles[selected] ? selected : 'PLA+';
+  // Keep legacy config synchronized for desktop/backward compatibility.
+  target.config = { ...target.materialProfiles[target.selectedMaterialProfile] };
+  return target;
+}
+
+function selectedMaterialProfileName() {
+  normalizeMaterialProfiles(db);
+  return db.selectedMaterialProfile || 'PLA+';
+}
+
+function activeMaterialProfile() {
+  normalizeMaterialProfiles(db);
+  return db.materialProfiles[selectedMaterialProfileName()];
+}
+
+
 const calcFingerprint = result => JSON.stringify({
   customer: (result.customer || '').trim().toLowerCase(),
   model: (result.model || '').trim().toLowerCase(),
@@ -73,8 +176,11 @@ let activeDbTable = 'items';
 let selectedItemIds = new Set();
 
 function defaultDb() {
+  const config = { P: 7800, rho: 1.24, d_mm: 1.75, W: 120, R: 65, Cp: 95000, H: 5000, F: 0.05, Cups: 0, Hups: 0 };
   return {
-    config: { P: 7800, rho: 1.24, d_mm: 1.75, W: 120, R: 65, Cp: 95000, H: 5000, F: 0.05, Cups: 0, Hups: 0 },
+    config,
+    selectedMaterialProfile: 'PLA+',
+    materialProfiles: buildDefaultMaterialProfiles(config),
     itemRecords: [],
     orders: [],
     invoices: [],
@@ -88,7 +194,7 @@ function defaultDb() {
 function loadDb() {
   try {
     const data = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
-    return { ...defaultDb(), ...(data || {}) };
+    return normalizeMaterialProfiles({ ...defaultDb(), ...(data || {}) });
   } catch (e) {
     return defaultDb();
   }
@@ -106,9 +212,11 @@ function normalizeMaterialColorDefaults() {
     });
   });
 }
+normalizeMaterialProfiles(db);
 normalizeMaterialColorDefaults();
 
 function saveDb(options = {}) {
+  normalizeMaterialProfiles(db);
   normalizeMaterialColorDefaults();
   const { render = true, cloud = true } = options;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
@@ -232,7 +340,7 @@ async function writeCloudNow() {
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
       updatedBy: firebaseUser.email || firebaseUser.uid,
       replaceMode: true,
-      schemaVersion: 4
+      schemaVersion: 5
     });
     cloudReady = true;
     setCloudStatus('Cloud: saved / replaced latest database', 'ok');
@@ -341,23 +449,46 @@ function initDatesAndIds() {
   $('#invoiceNo').value = docId('INV');
 }
 
+function renderMaterialProfileSelector() {
+  normalizeMaterialProfiles(db);
+  const select = $('#materialProfileSelect');
+  if (!select) return;
+  const current = selectedMaterialProfileName();
+  if (select.options.length !== MATERIAL_PROFILE_NAMES.length) {
+    select.innerHTML = MATERIAL_PROFILE_NAMES.map(name => `<option value="${safe(name)}">${safe(name)}</option>`).join('');
+  }
+  select.value = current;
+  const jobMaterial = $('#calcMaterial');
+  if (jobMaterial && document.activeElement !== jobMaterial) jobMaterial.value = current;
+  const label = $('#activeMaterialProfileLabel');
+  if (label) label.textContent = `${current} profile`;
+}
+
 function applyCalculatorConfigToForm(force = false) {
-  const defaults = defaultDb().config;
+  normalizeMaterialProfiles(db);
+  renderMaterialProfileSelector();
+  const profile = activeMaterialProfile();
+  const defaults = buildDefaultMaterialProfiles(defaultDb().config)[selectedMaterialProfileName()] || defaultDb().config;
   CONFIG_KEYS.forEach(key => {
     const el = $(`#${key}`);
     if (!el) return;
     if (!force && document.activeElement === el) return;
-    const value = (db.config && db.config[key] !== undefined && db.config[key] !== null && db.config[key] !== '') ? db.config[key] : defaults[key];
+    const value = (profile && profile[key] !== undefined && profile[key] !== null && profile[key] !== '') ? profile[key] : defaults[key];
     el.value = value;
   });
 }
 
 function saveCalculatorConfigFromForm(options = {}) {
   const { render = false } = options;
-  db.config = {
-    ...(db.config || defaultDb().config),
+  normalizeMaterialProfiles(db);
+  const name = selectedMaterialProfileName();
+  const previous = db.materialProfiles[name] || buildDefaultMaterialProfiles(db.config)[name];
+  const updated = {
+    ...previous,
     ...Object.fromEntries(CONFIG_KEYS.map(key => [key, $(`#${key}`)?.value ?? '']))
   };
+  db.materialProfiles[name] = updated;
+  db.config = { ...updated }; // backward compatibility with desktop/older website builds
   saveDb({ render, cloud: true });
 }
 
@@ -366,8 +497,41 @@ function scheduleCalculatorConfigSave() {
   configSaveTimer = setTimeout(() => saveCalculatorConfigFromForm({ render: false }), 500);
 }
 
-function initCalculator() {
+function switchMaterialProfile(name) {
+  // Save edits to the current profile before switching.
+  saveCalculatorConfigFromForm({ render: false });
+  normalizeMaterialProfiles(db);
+  if (!db.materialProfiles[name]) return;
+  db.selectedMaterialProfile = name;
+  db.config = { ...db.materialProfiles[name] };
+  if ($('#calcMaterial')) $('#calcMaterial').value = name === 'Custom' ? 'Custom' : name;
+  lastCalc = null;
   applyCalculatorConfigToForm(true);
+  saveDb({ render: false, cloud: true });
+  toast(`${name} material profile selected`);
+}
+
+function resetSelectedMaterialProfile() {
+  normalizeMaterialProfiles(db);
+  const name = selectedMaterialProfileName();
+  if (!confirm(`Reset only the ${name} material profile to its starter defaults?`)) return;
+  const defaults = buildDefaultMaterialProfiles(defaultDb().config);
+  db.materialProfiles[name] = { ...defaults[name] };
+  db.config = { ...db.materialProfiles[name] };
+  applyCalculatorConfigToForm(true);
+  saveDb({ render: false, cloud: true });
+  toast(`${name} profile reset`);
+}
+
+function initCalculator() {
+  normalizeMaterialProfiles(db);
+  renderMaterialProfileSelector();
+  applyCalculatorConfigToForm(true);
+  if ($('#calcMaterial')) $('#calcMaterial').value = selectedMaterialProfileName();
+  const profileSelect = $('#materialProfileSelect');
+  if (profileSelect) profileSelect.addEventListener('change', e => switchMaterialProfile(e.target.value));
+  const resetProfileBtn = $('#resetMaterialProfileBtn');
+  if (resetProfileBtn) resetProfileBtn.addEventListener('click', resetSelectedMaterialProfile);
   CONFIG_KEYS.forEach(key => {
     const el = $(`#${key}`);
     if (!el) return;
@@ -457,7 +621,7 @@ function calculatePrice(showMessage = false) {
     createdAt: nowStamp(),
     customer: $('#calcCustomer').value.trim(),
     model: $('#calcModel').value.trim() || '3D Printed Item',
-    materialType: $('#calcMaterial') ? $('#calcMaterial').value.trim() : 'PLA+',
+    materialType: selectedMaterialProfileName(),
     color: $('#calcColor') ? $('#calcColor').value.trim() : 'Black',
     status: $('#calcStatus').value,
     printTimeMinutes: minutes,
@@ -485,7 +649,7 @@ function calculatePrice(showMessage = false) {
 
 function resetJob() {
   ['calcCustomer', 'calcModel', 'calcDays', 'calcHours', 'calcMinutes', 'lengthM', 'weightG', 'margin'].forEach(idName => { const el = $(`#${idName}`); if (el) el.value = idName === 'margin' ? '0' : ''; });
-  if ($('#calcMaterial')) $('#calcMaterial').value = 'PLA+';
+  if ($('#calcMaterial')) $('#calcMaterial').value = selectedMaterialProfileName();
   if ($('#calcColor')) $('#calcColor').value = 'Black';
   $('#calcDays').value = '0'; $('#calcHours').value = '0'; $('#calcMinutes').value = '0';
   lastCalc = null;
@@ -1712,7 +1876,7 @@ function exportJson() {
 }
 
 function normalizeImportedAdminDb(imported) {
-  return {
+  return normalizeMaterialProfiles({
     ...defaultDb(),
     ...imported,
     itemRecords: imported.itemRecords || imported.items || [],
@@ -1722,7 +1886,7 @@ function normalizeImportedAdminDb(imported) {
     budget: imported.budget || imported.budgetRecords || [],
     customGroups: imported.customGroups || [],
     customRecords: imported.customRecords || []
-  };
+  });
 }
 
 function upsertMany(target, rows) {
@@ -1845,6 +2009,8 @@ async function importDesktopSqlite(file) {
     // records and it does NOT convert desktop orders into bill/invoice records.
     db = normalizeImportedAdminDb({
       config: db.config || defaultDb().config,
+      selectedMaterialProfile: db.selectedMaterialProfile || 'PLA+',
+      materialProfiles: db.materialProfiles || buildDefaultMaterialProfiles(db.config || defaultDb().config),
       itemRecords: mappedItems,
       orders: mappedOrders,
       invoices: [],
@@ -1895,6 +2061,8 @@ function initSettings() {
 }
 
 function renderAll() {
+  normalizeMaterialProfiles(db);
+  renderMaterialProfileSelector();
   applyCalculatorConfigToForm(false);
   renderStats();
   renderCustomGroups();

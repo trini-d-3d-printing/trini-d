@@ -98,7 +98,19 @@
         <div class="admin-card">
           <div class="card-title"><span class="eyebrow">Calculator</span><h2>3D Precision Pricing</h2><p class="muted">Same desktop pricing logic converted to web form.</p></div>
           <form id="calculatorForm" class="admin-form">
-            <h3 class="form-subtitle">Operational Base</h3>
+            <div class="material-profile-panel">
+              <div class="material-profile-copy">
+                <span class="eyebrow">Filament Profile</span>
+                <h3>Material-Specific Operational Base</h3>
+                <p class="muted">Select a filament profile. Every calculator result uses the selected profile values below. Edit any value and it is saved only to that material profile.</p>
+              </div>
+              <label class="field material-profile-field">
+                <span>Selected Material Profile</span>
+                <select id="materialProfileSelect" aria-label="Selected material profile"></select>
+              </label>
+              <button class="btn ghost material-profile-reset" id="resetMaterialProfileBtn" type="button">Reset Selected Profile</button>
+            </div>
+            <h3 class="form-subtitle">Operational Base <small id="activeMaterialProfileLabel">PLA+ profile</small></h3>
             <div class="form-grid admin-form-grid four">
               <label class="field"><span>Filament Price Rs/kg</span><input id="P" type="text" inputmode="decimal" step="0.01" required></label>
               <label class="field"><span>Filament Density g/cm³</span><input id="rho" type="text" inputmode="decimal" step="0.001" required></label>
@@ -116,7 +128,7 @@
             <div class="form-grid admin-form-grid four">
               <label class="field"><span>Customer optional</span><input id="calcCustomer" type="text" placeholder="Customer name"></label>
               <label class="field"><span>Model Name</span><input id="calcModel" type="text" placeholder="Model / item name"></label>
-              <label class="field"><span>Material Type</span><input id="calcMaterial" type="text" value="PLA+" placeholder="PLA+"></label>
+              <label class="field"><span>Job Material (from selected profile)</span><input id="calcMaterial" type="text" value="PLA+" readonly aria-readonly="true"></label>
               <label class="field"><span>Color</span><input id="calcColor" type="text" value="Black" placeholder="Black"></label>
               <label class="field"><span>Days</span><input id="calcDays" type="text" inputmode="decimal" step="1" min="0" value="0"></label>
               <label class="field"><span>Hours</span><input id="calcHours" type="text" inputmode="decimal" step="1" min="0" value="0"></label>

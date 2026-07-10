@@ -287,3 +287,47 @@ input[type="number"]::-webkit-inner-spin-button {
 :root[data-theme="light"] code{background:rgba(31,41,55,.07)}
 .admin-theme-toggle{min-width:112px;justify-content:center}
 .admin-theme-toggle .theme-icon{font-size:1rem}
+
+
+/* v29 — Material-specific calculator profiles */
+.material-profile-panel {
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(240px, 360px) auto;
+  gap: 18px;
+  align-items: end;
+  padding: 20px;
+  margin: 0 0 22px;
+  border: 1px solid rgba(255, 170, 0, .28);
+  border-radius: 22px;
+  background:
+    radial-gradient(circle at 12% 10%, rgba(255, 179, 0, .11), transparent 34%),
+    linear-gradient(135deg, rgba(255,255,255,.055), rgba(255,255,255,.018));
+  box-shadow: inset 0 1px 0 rgba(255,255,255,.06), 0 18px 50px rgba(0,0,0,.14);
+}
+.material-profile-copy h3 { margin: 5px 0 7px; }
+.material-profile-copy p { margin: 0; max-width: 760px; }
+.material-profile-field { margin: 0; }
+.material-profile-field select {
+  width: 100%;
+  min-height: 52px;
+  font-weight: 800;
+  border-color: rgba(255, 170, 0, .34);
+}
+.material-profile-reset { min-height: 52px; white-space: nowrap; }
+.form-subtitle small {
+  margin-left: 9px;
+  color: var(--muted, #aeb3bd);
+  font-size: .72em;
+  font-weight: 700;
+}
+[data-admin-theme="light"] .material-profile-panel {
+  background:
+    radial-gradient(circle at 12% 10%, rgba(229, 158, 0, .12), transparent 34%),
+    linear-gradient(135deg, rgba(255,255,255,.9), rgba(235,238,243,.82));
+  border-color: rgba(180, 123, 0, .28);
+  box-shadow: 0 18px 48px rgba(64, 69, 78, .10);
+}
+@media (max-width: 1000px) {
+  .material-profile-panel { grid-template-columns: 1fr; align-items: stretch; }
+  .material-profile-reset { width: 100%; }
+}
