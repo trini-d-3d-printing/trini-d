@@ -54,6 +54,7 @@ const MATERIAL_PROFILE_SPECS = [
   ['PLA-CF', 1.30, 9500],
   ['PLA-GF', 1.32, 9500],
   ['PETG', 1.27, 6000],
+  ['PETG+ HS', 1.27, 6000],
   ['High-Speed PETG', 1.27, 7000],
   ['PETG-CF', 1.30, 10000],
   ['PETG-GF', 1.35, 10000],
