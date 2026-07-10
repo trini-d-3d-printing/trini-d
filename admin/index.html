@@ -265,6 +265,21 @@
       <section class="admin-section" id="section-settings">
         <div class="admin-grid two">
           <article class="admin-card">
+            <div class="card-title"><span class="eyebrow">Smart Quote</span><h2>Public estimate profit margin.</h2></div>
+            <p class="muted">Change the profit margin used by the public Smart Quote estimator. The value is stored separately in Firebase and updates open Smart Quote pages in realtime.</p>
+            <div class="form-grid">
+              <label>Smart Quote Profit Margin (%)
+                <input id="smartQuoteProfitMargin" type="number" min="0" max="1000" step="0.01" value="75" inputmode="decimal" />
+              </label>
+            </div>
+            <div class="admin-actions">
+              <button class="btn primary" id="saveSmartQuoteConfigBtn" type="button">Save Smart Quote Margin</button>
+              <button class="btn ghost" id="resetSmartQuoteConfigBtn" type="button">Reset to 75%</button>
+            </div>
+            <p class="muted" id="smartQuoteConfigStatus">Smart Quote margin: loading…</p>
+            <p class="muted import-note">This setting affects only the public Smart Quote preliminary estimate. It does not change the normal Price Calculator margin field.</p>
+          </article>
+          <article class="admin-card">
             <div class="card-title"><span class="eyebrow">Export</span><h2>Backup your admin database.</h2></div>
             <p class="muted">This version saves the admin database to Firebase Cloud Firestore and keeps a local browser cache for backup/offline loading.</p>
             <div class="admin-actions vertical-actions">

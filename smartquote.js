@@ -32,6 +32,8 @@ const QUALITY = {
 };
 const MODEL_COLORS = { Black:0x4a4f59, White:0xe7e9ed, Gray:0x7a808b, Gold:0xd6a11d, Red:0xc63a3a, Blue:0x315dca, Green:0x3f8d55, Transparent:0x9fcbd0 };
 const PRICING = { powerW:150, electricityPerKWh:70, printerCost:140000, printerLifeHours:2000, profitMargin:75, filamentDiameterMm:1.75 };
+const SMARTQUOTE_CONFIG_DOC_PATH = 'trinid/default/public/smartquote';
+let smartQuoteConfigUnsubscribe = null;
 
 let renderer, scene, camera, controls, mesh;
 let modelData = null;
@@ -42,6 +44,40 @@ function clamp(v,min,max){ return Math.min(max,Math.max(min,v)); }
 function fmt(n,d=2){ return Number(n||0).toLocaleString(undefined,{minimumFractionDigits:d,maximumFractionDigits:d}); }
 function fmtBytes(bytes){ if(bytes < 1024) return `${bytes} B`; if(bytes < 1024**2) return `${fmt(bytes/1024,1)} KB`; return `${fmt(bytes/1024**2,1)} MB`; }
 function fmtTime(minutes){ const total=Math.max(0,Math.round(minutes)); const d=Math.floor(total/1440); const h=Math.floor((total%1440)/60); const m=total%60; return [d?`${d}d`:null,h?`${h}h`:null,(m||(!d&&!h))?`${m}m`:null].filter(Boolean).join(' '); }
+
+function normalizeCloudProfitMargin(value){
+  const n=Number(String(value ?? '').replace(/,/g,'').trim());
+  if(!Number.isFinite(n)) return 75;
+  return Math.max(0,Math.min(1000,n));
+}
+
+async function initSmartQuoteCloudConfig(){
+  if(!window.firebase || !window.TRINID_FIREBASE_CONFIG){
+    console.warn('Smart Quote cloud margin unavailable; using fallback 75%.');
+    return;
+  }
+  try{
+    const fb=window.firebase;
+    fb.apps && fb.apps.length ? fb.app() : fb.initializeApp(window.TRINID_FIREBASE_CONFIG);
+    const auth=fb.auth();
+    const store=fb.firestore();
+    try{ await auth.setPersistence(fb.auth.Auth.Persistence.LOCAL); }catch(e){}
+    if(!auth.currentUser) await auth.signInAnonymously();
+    if(smartQuoteConfigUnsubscribe) smartQuoteConfigUnsubscribe();
+    smartQuoteConfigUnsubscribe=store.doc(SMARTQUOTE_CONFIG_DOC_PATH).onSnapshot(snapshot=>{
+      const data=snapshot.exists ? (snapshot.data()||{}) : {};
+      const nextMargin=normalizeCloudProfitMargin(data.profitMargin);
+      const changed=nextMargin!==PRICING.profitMargin;
+      PRICING.profitMargin=nextMargin;
+      if(changed) calculateEstimate();
+      console.info(`Smart Quote profit margin synced: ${PRICING.profitMargin}%`);
+    },err=>{
+      console.warn('Smart Quote margin listener failed; using current fallback.',err);
+    });
+  }catch(err){
+    console.warn('Smart Quote anonymous cloud config failed; using fallback 75%.',err);
+  }
+}
 
 function initViewer(){
   renderer = new THREE.WebGLRenderer({canvas,antialias:true,alpha:true});
@@ -280,7 +316,7 @@ function calculateEstimate(){
     layerHeightMm:q.layer, infill:Number(infill.value), quantity:qty,
     dimensions:{x:modelData.size.x,y:modelData.size.y,z:modelData.size.z}, triangles:modelData.triangles, solidVolumeCm3:solid/1000,
     printTimeMinutes:timeMinutes*qty, unitPrintTimeMinutes:timeMinutes, weightG:weightG*qty, unitWeightG:weightG, filamentLengthM:lengthM*qty, unitFilamentLengthM:lengthM,
-    unitPrice,totalPrice, createdAt:new Date().toISOString(), stage:'browser-preliminary'
+    unitPrice,totalPrice, profitMargin:PRICING.profitMargin, createdAt:new Date().toISOString(), stage:'browser-preliminary'
   };
   modelData.estimate=estimate;
   $('#estimateStatus').textContent=`${currentFile.name} · ${qty} item${qty===1?'':'s'}`;
@@ -325,3 +361,4 @@ colorSelect.value='Black';
 syncOrbColor();
 initViewer();
 calculateEstimate();
+initSmartQuoteCloudConfig();

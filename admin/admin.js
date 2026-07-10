@@ -4,6 +4,7 @@ const STORAGE_KEY = 'trinid_admin_database_v1';
 const QUOTE_DRAFT_KEY = 'trinid_admin_quote_draft_v2';
 const BILL_DRAFT_KEY = 'trinid_admin_invoice_draft_v2';
 const CLOUD_DOC_PATH = 'trinid/default';
+const SMARTQUOTE_CONFIG_DOC_PATH = 'trinid/default/public/smartquote';
 
 const $ = (sel, root = document) => root.querySelector(sel);
 const $$ = (sel, root = document) => Array.from(root.querySelectorAll(sel));
@@ -167,9 +168,12 @@ let firebaseAuth = null;
 let firebaseStore = null;
 let firebaseUser = null;
 let cloudUnsubscribe = null;
+let smartQuoteConfigUnsubscribe = null;
 let applyingRemote = false;
 let cloudWriteTimer = null;
 let configSaveTimer = null;
+let smartQuoteConfigSaveTimer = null;
+let smartQuoteConfig = { profitMargin: 75 };
 let cloudReady = false;
 let db = loadDb();
 let lastCalc = null;
@@ -261,6 +265,77 @@ function initAdminTheme() {
   });
 }
 
+function normalizeSmartQuoteMargin(value) {
+  const raw = Number(String(value ?? '').replace(/,/g, '').trim());
+  if (!Number.isFinite(raw)) return 75;
+  return Math.max(0, Math.min(1000, raw));
+}
+
+function renderSmartQuoteConfig(force = false) {
+  const input = $('#smartQuoteProfitMargin');
+  if (input && (force || document.activeElement !== input)) input.value = String(smartQuoteConfig.profitMargin);
+  const status = $('#smartQuoteConfigStatus');
+  if (status) status.textContent = `Smart Quote margin: ${smartQuoteConfig.profitMargin}% · realtime cloud setting`;
+}
+
+function stopSmartQuoteConfigSync() {
+  if (smartQuoteConfigUnsubscribe) {
+    smartQuoteConfigUnsubscribe();
+    smartQuoteConfigUnsubscribe = null;
+  }
+}
+
+function startSmartQuoteConfigSync() {
+  if (!firebaseStore || !firebaseUser) return;
+  stopSmartQuoteConfigSync();
+  const ref = firebaseStore.doc(SMARTQUOTE_CONFIG_DOC_PATH);
+  smartQuoteConfigUnsubscribe = ref.onSnapshot(snapshot => {
+    if (snapshot.exists) {
+      const data = snapshot.data() || {};
+      smartQuoteConfig.profitMargin = normalizeSmartQuoteMargin(data.profitMargin);
+    } else {
+      smartQuoteConfig.profitMargin = 75;
+    }
+    renderSmartQuoteConfig(false);
+  }, err => {
+    console.error('Smart Quote config sync error:', err);
+    const status = $('#smartQuoteConfigStatus');
+    if (status) status.textContent = 'Smart Quote margin: cloud sync error';
+  });
+}
+
+async function saveSmartQuoteConfigNow(showToast = true) {
+  if (!firebaseStore || !firebaseUser) {
+    alert('Firebase admin login is required before saving the Smart Quote margin.');
+    return;
+  }
+  const input = $('#smartQuoteProfitMargin');
+  const margin = normalizeSmartQuoteMargin(input?.value ?? smartQuoteConfig.profitMargin);
+  smartQuoteConfig.profitMargin = margin;
+  if (input) input.value = String(margin);
+  const status = $('#smartQuoteConfigStatus');
+  if (status) status.textContent = `Smart Quote margin: saving ${margin}%…`;
+  try {
+    await firebaseStore.doc(SMARTQUOTE_CONFIG_DOC_PATH).set({
+      profitMargin: margin,
+      updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+      updatedBy: firebaseUser.email || firebaseUser.uid,
+      schemaVersion: 1
+    }, { merge: true });
+    renderSmartQuoteConfig(true);
+    if (showToast) toast(`Smart Quote profit margin saved: ${margin}%`);
+  } catch (err) {
+    console.error(err);
+    if (status) status.textContent = 'Smart Quote margin: save failed';
+    alert(`Could not save Smart Quote margin: ${err.message || err}`);
+  }
+}
+
+function scheduleSmartQuoteConfigSave() {
+  clearTimeout(smartQuoteConfigSaveTimer);
+  smartQuoteConfigSaveTimer = setTimeout(() => saveSmartQuoteConfigNow(false), 550);
+}
+
 function initFirebase() {
   if (!window.firebase || !window.TRINID_FIREBASE_CONFIG) {
     setCloudStatus('Cloud: Firebase SDK missing', 'error');
@@ -277,8 +352,10 @@ function initFirebase() {
         showApp();
         setCloudStatus(`Cloud: signed in as ${user.email || 'admin'}`, 'ok');
         startCloudSync();
+        startSmartQuoteConfigSync();
       } else {
         stopCloudSync();
+        stopSmartQuoteConfigSync();
         showLogin();
         setCloudStatus('Cloud: signed out', '');
       }
@@ -2029,6 +2106,17 @@ async function importDesktopSqlite(file) {
 }
 
 function initSettings() {
+  renderSmartQuoteConfig(true);
+  const sqMarginInput = $('#smartQuoteProfitMargin');
+  if (sqMarginInput) {
+    sqMarginInput.addEventListener('input', scheduleSmartQuoteConfigSave);
+    sqMarginInput.addEventListener('change', () => saveSmartQuoteConfigNow(false));
+  }
+  $('#saveSmartQuoteConfigBtn')?.addEventListener('click', () => saveSmartQuoteConfigNow(true));
+  $('#resetSmartQuoteConfigBtn')?.addEventListener('click', () => {
+    if (sqMarginInput) sqMarginInput.value = '75';
+    saveSmartQuoteConfigNow(true);
+  });
   $('#exportJsonBtn').addEventListener('click', exportJson);
   $('#saveSnapshotBtn').addEventListener('click', exportJson);
   $('#importJsonInput').addEventListener('change', e => {
