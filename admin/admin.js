@@ -19,13 +19,14 @@ const ceilCurrency = value => {
 };
 const money = value => `Rs ${ceilCurrency(value).toLocaleString('en-LK', { maximumFractionDigits: 0 })}`;
 const safe = value => String(value ?? '').replace(/[&<>"]/g, ch => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;' }[ch]));
+const noneBlank = value => { const text = String(value ?? '').trim(); return /^none$/i.test(text) ? '' : text; };
 const hasOwn = (obj, key) => Object.prototype.hasOwnProperty.call(obj || {}, key);
 const materialText = obj => {
-  if (hasOwn(obj, 'materialType')) return String(obj.materialType ?? '').trim();
-  if (hasOwn(obj, 'material')) return String(obj.material ?? '').trim();
+  if (hasOwn(obj, 'materialType')) return noneBlank(obj.materialType);
+  if (hasOwn(obj, 'material')) return noneBlank(obj.material);
   return 'PLA+';
 };
-const colorText = obj => hasOwn(obj, 'color') ? String(obj.color ?? '').trim() : 'Black';
+const colorText = obj => hasOwn(obj, 'color') ? noneBlank(obj.color) : 'Black';
 const materialColorText = obj => [materialText(obj), colorText(obj)].filter(Boolean).join(' / ');
 const id = prefix => `${prefix}-${new Date().toISOString().replace(/[-:.TZ]/g, '').slice(0, 14)}-${Math.floor(Math.random() * 900 + 100)}`;
 const docId = prefix => {
@@ -39,8 +40,8 @@ const prettyDate = value => {
 };
 const round2 = value => Math.round(num(value) * 100) / 100;
 const CONFIG_KEYS = ['P', 'rho', 'd_mm', 'W', 'R', 'Cp', 'H', 'F', 'Cups', 'Hups'];
-const LINE_MATERIAL_OPTIONS = ['PLA+', 'PETG+'];
-const LINE_COLOR_OPTIONS = ['Black', 'White', 'Gray', 'Red', 'Blue', 'Green', 'Yellow', 'Orange', 'Gold', 'Silver', 'Transparent', 'Natural'];
+const LINE_MATERIAL_OPTIONS = [{ value: '', label: 'None' }, 'PLA+', 'PETG+'];
+const LINE_COLOR_OPTIONS = [{ value: '', label: 'None' }, 'Black', 'White', 'Gray', 'Red', 'Blue', 'Green', 'Yellow', 'Orange', 'Gold', 'Silver', 'Transparent', 'Natural'];
 
 // Material profile library for FDM/FFF filament pricing.
 // Densities and starter prices are editable defaults, not supplier quotes.
@@ -813,8 +814,13 @@ function lineInput(value, cls = '', type = 'text') {
 }
 
 function lineSelect(value, cls = '', options = [], fallback = '') {
-  const current = String(value ?? fallback ?? '');
-  return `<select class="${cls}">${options.map(opt => `<option value="${safe(opt)}"${current === opt ? ' selected' : ''}>${safe(opt)}</option>`).join('')}</select>`;
+  const current = noneBlank(value ?? fallback ?? '');
+  return `<select class="${cls}">${options.map(opt => {
+    const rawValue = typeof opt === 'object' ? opt.value : opt;
+    const label = typeof opt === 'object' ? opt.label : opt;
+    const optValue = noneBlank(rawValue);
+    return `<option value="${safe(optValue)}"${current === optValue ? ' selected' : ''}>${safe(label)}</option>`;
+  }).join('')}</select>`;
 }
 
 function readCustomerPdfOptions() {
@@ -868,9 +874,10 @@ function safeFilePart(value) {
 }
 
 function customerFileTitle(prefix, no, customer, useCustomerName) {
-  const parts = [prefix, safeFilePart(no) || docId(prefix === 'Invoice' ? 'INV' : 'QT')];
-  if (useCustomerName && customer) parts.push(safeFilePart(customer));
-  return `${parts.filter(Boolean).join('_')}.pdf`;
+  const safeNo = safeFilePart(no) || docId(prefix === 'Invoice' ? 'INV' : 'QT');
+  const safeCustomer = safeFilePart(customer);
+  if (useCustomerName && safeCustomer) return `${prefix}_${safeCustomer}${safeNo}.pdf`;
+  return `${prefix}_${safeNo}.pdf`;
 }
 
 function addBillRow(data = {}) {
@@ -878,8 +885,8 @@ function addBillRow(data = {}) {
   tr.dataset.calcKey = data.calcKey || '';
   tr.innerHTML = `
     <td>${lineInput(data.model || '', 'model-input')}</td>
-    <td>${lineSelect(materialText(data) || 'PLA+', 'material-input', LINE_MATERIAL_OPTIONS, 'PLA+')}</td>
-    <td>${lineSelect(colorText(data) || 'Black', 'color-input', LINE_COLOR_OPTIONS, 'Black')}</td>
+    <td>${lineSelect((hasOwn(data, 'materialType') || hasOwn(data, 'material')) ? materialText(data) : 'PLA+', 'material-input', LINE_MATERIAL_OPTIONS, 'PLA+')}</td>
+    <td>${lineSelect(hasOwn(data, 'color') ? colorText(data) : 'Black', 'color-input', LINE_COLOR_OPTIONS, 'Black')}</td>
     <td>${lineInput(data.qty || 1, 'qty-input', 'number')}</td>
     <td>${lineInput(data.unitPrice ?? data.unit ?? '', 'unit-input', 'number')}</td>
     <td>${lineInput(data.discount || 0, 'discount-input', 'number')}</td>
@@ -904,8 +911,8 @@ function addQuoteRow(data = {}) {
   tr.dataset.profit = data.profit ? ceilCurrency(data.profit) : '';
   tr.innerHTML = `
     <td>${lineInput(data.model || '', 'model-input')}</td>
-    <td>${lineSelect(materialText(data) || 'PLA+', 'material-input', LINE_MATERIAL_OPTIONS, 'PLA+')}</td>
-    <td>${lineSelect(colorText(data) || 'Black', 'color-input', LINE_COLOR_OPTIONS, 'Black')}</td>
+    <td>${lineSelect((hasOwn(data, 'materialType') || hasOwn(data, 'material')) ? materialText(data) : 'PLA+', 'material-input', LINE_MATERIAL_OPTIONS, 'PLA+')}</td>
+    <td>${lineSelect(hasOwn(data, 'color') ? colorText(data) : 'Black', 'color-input', LINE_COLOR_OPTIONS, 'Black')}</td>
     <td>${lineInput(data.qty || 1, 'qty-input', 'number')}</td>
     <td>${lineInput(data.unitPrice ?? data.unit ?? '', 'unit-input', 'number')}</td>
     <td>${lineInput(data.layer || '0.2', 'layer-input')}</td>
@@ -921,8 +928,8 @@ function addQuoteRow(data = {}) {
 function collectBillItems() {
   return $$('#billItemsBody tr').map(tr => ({
     model: $('.model-input', tr).value.trim(),
-    materialType: $('.material-input', tr) ? $('.material-input', tr).value.trim() : 'PLA+',
-    color: $('.color-input', tr) ? $('.color-input', tr).value.trim() : 'Black',
+    materialType: $('.material-input', tr) ? noneBlank($('.material-input', tr).value) : 'PLA+',
+    color: $('.color-input', tr) ? noneBlank($('.color-input', tr).value) : 'Black',
     qty: num($('.qty-input', tr).value) || 1,
     unitPrice: ceilCurrency($('.unit-input', tr).value),
     discount: ceilCurrency($('.discount-input', tr).value),
@@ -939,8 +946,8 @@ function collectBillItems() {
 function collectQuoteItems() {
   return $$('#quoteItemsBody tr').map(tr => ({
     model: $('.model-input', tr).value.trim(),
-    materialType: $('.material-input', tr) ? $('.material-input', tr).value.trim() : 'PLA+',
-    color: $('.color-input', tr) ? $('.color-input', tr).value.trim() : 'Black',
+    materialType: $('.material-input', tr) ? noneBlank($('.material-input', tr).value) : 'PLA+',
+    color: $('.color-input', tr) ? noneBlank($('.color-input', tr).value) : 'Black',
     qty: num($('.qty-input', tr).value) || 1,
     unitPrice: ceilCurrency($('.unit-input', tr).value),
     layer: $('.layer-input', tr).value.trim(),
