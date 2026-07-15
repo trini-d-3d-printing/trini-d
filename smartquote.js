@@ -721,7 +721,7 @@ canvas.addEventListener('webglcontextrestored',()=>{ resizeViewer(); if(mesh) fi
 resetSmartQuoteIdleState();
 setConfiguredApiUrl();
 apiMode();
-initCustomSelects();
+// initCustomSelects();
 updateMaterialOptions();
 colorSelect.value='Black';
 refreshCustomSelect(colorSelect);
