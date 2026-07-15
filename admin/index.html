@@ -289,13 +289,16 @@
               <label>Smart Quote Profit Margin (%)
                 <input id="smartQuoteProfitMargin" type="number" min="0" max="1000" step="0.01" value="75" inputmode="decimal" />
               </label>
+              <label>Public Smart Quote Backend URL
+                <input id="smartQuoteBackendApiUrl" type="url" placeholder="https://example.trycloudflare.com" autocomplete="off" />
+              </label>
             </div>
             <div class="admin-actions">
-              <button class="btn primary" id="saveSmartQuoteConfigBtn" type="button">Save Smart Quote Margin</button>
+              <button class="btn primary" id="saveSmartQuoteConfigBtn" type="button">Save Smart Quote Settings</button>
               <button class="btn ghost" id="resetSmartQuoteConfigBtn" type="button">Reset to 75%</button>
             </div>
             <p class="muted" id="smartQuoteConfigStatus">Smart Quote margin: loading…</p>
-            <p class="muted import-note">This setting affects only the public Smart Quote preliminary estimate. It does not change the normal Price Calculator margin field.</p>
+            <p class="muted import-note">The public HTTPS backend URL is required for customers. A localhost URL works only on the same computer running the backend.</p>
           </article>
           <article class="admin-card">
             <div class="card-title"><span class="eyebrow">Export</span><h2>Backup your admin database.</h2></div>

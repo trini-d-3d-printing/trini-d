@@ -100,8 +100,9 @@ async function initSmartQuoteCloudConfig(){
       const nextMargin=normalizeCloudProfitMargin(data.profitMargin);
       const changed=nextMargin!==PRICING.profitMargin;
       PRICING.profitMargin=nextMargin;
-      if(changed) calculateEstimate();
-      console.info(`Smart Quote profit margin synced: ${PRICING.profitMargin}%`);
+      setConfiguredApiUrl(data.backendApiUrl || data.publicApiUrl || '');
+      if(changed && modelData) calculateEstimate();
+      console.info(`Smart Quote config synced: margin ${PRICING.profitMargin}%, API ${API_URLS[0] || 'not configured'}`);
     },err=>{
       console.warn('Smart Quote margin listener failed; using current fallback.',err);
     });
@@ -435,7 +436,7 @@ function showBackendError(message){
   const status=$('#estimateStatus');
   if(status) status.textContent=currentFile ? `${currentFile.name} · local backend required` : 'Local backend required';
   const note=$('.sq-settings-note') || $('#settingsNote');
-  if(note) note.textContent=`Local backend failed: ${message}. Open http://127.0.0.1:8000/health and keep the Stage 7 backend CMD running.`;
+  if(note) note.textContent=`Local backend failed: ${message}. For public customer access, configure the public HTTPS backend URL in Admin > Export / Settings. Localhost works only on this same PC.`;
   $('#estTime').textContent='—';
   $('#estWeight').textContent='—';
   $('#estLayer').textContent=`${QUALITY[qualitySelect.value].layer.toFixed(2)} mm`;

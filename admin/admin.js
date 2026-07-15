@@ -179,7 +179,7 @@ let applyingRemote = false;
 let cloudWriteTimer = null;
 let configSaveTimer = null;
 let smartQuoteConfigSaveTimer = null;
-let smartQuoteConfig = { profitMargin: 75 };
+let smartQuoteConfig = { profitMargin: 75, backendApiUrl: '' };
 let cloudReady = false;
 let db = loadDb();
 let lastCalc = null;
@@ -280,8 +280,10 @@ function normalizeSmartQuoteMargin(value) {
 function renderSmartQuoteConfig(force = false) {
   const input = $('#smartQuoteProfitMargin');
   if (input && (force || document.activeElement !== input)) input.value = String(smartQuoteConfig.profitMargin);
+  const apiInput = $('#smartQuoteBackendApiUrl');
+  if (apiInput && (force || document.activeElement !== apiInput)) apiInput.value = smartQuoteConfig.backendApiUrl || '';
   const status = $('#smartQuoteConfigStatus');
-  if (status) status.textContent = `Smart Quote margin: ${smartQuoteConfig.profitMargin}% · realtime cloud setting`;
+  if (status) status.textContent = `Smart Quote margin: ${smartQuoteConfig.profitMargin}% · backend: ${smartQuoteConfig.backendApiUrl || 'not configured'}`;
 }
 
 function stopSmartQuoteConfigSync() {
@@ -299,6 +301,7 @@ function startSmartQuoteConfigSync() {
     if (snapshot.exists) {
       const data = snapshot.data() || {};
       smartQuoteConfig.profitMargin = normalizeSmartQuoteMargin(data.profitMargin);
+      smartQuoteConfig.backendApiUrl = String(data.backendApiUrl || '').trim().replace(/\/$/,'');
     } else {
       smartQuoteConfig.profitMargin = 75;
     }
@@ -318,18 +321,23 @@ async function saveSmartQuoteConfigNow(showToast = true) {
   const input = $('#smartQuoteProfitMargin');
   const margin = normalizeSmartQuoteMargin(input?.value ?? smartQuoteConfig.profitMargin);
   smartQuoteConfig.profitMargin = margin;
+  const apiInput = $('#smartQuoteBackendApiUrl');
+  const backendApiUrl = String(apiInput?.value || smartQuoteConfig.backendApiUrl || '').trim().replace(/\/$/,'');
+  if (backendApiUrl && !/^https:\/\//i.test(backendApiUrl)) { alert('For public customers, use an HTTPS backend URL.'); return; }
+  smartQuoteConfig.backendApiUrl = backendApiUrl;
   if (input) input.value = String(margin);
   const status = $('#smartQuoteConfigStatus');
   if (status) status.textContent = `Smart Quote margin: saving ${margin}%…`;
   try {
     await firebaseStore.doc(SMARTQUOTE_CONFIG_DOC_PATH).set({
       profitMargin: margin,
+      backendApiUrl,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
       updatedBy: firebaseUser.email || firebaseUser.uid,
       schemaVersion: 1
     }, { merge: true });
     renderSmartQuoteConfig(true);
-    if (showToast) toast(`Smart Quote profit margin saved: ${margin}%`);
+    if (showToast) toast(`Smart Quote settings saved`);
   } catch (err) {
     console.error(err);
     if (status) status.textContent = 'Smart Quote margin: save failed';
@@ -2241,6 +2249,7 @@ async function importDesktopSqlite(file) {
 function initSettings() {
   renderSmartQuoteConfig(true);
   const sqMarginInput = $('#smartQuoteProfitMargin');
+  const sqBackendInput = $('#smartQuoteBackendApiUrl');
   if (sqMarginInput) {
     sqMarginInput.addEventListener('input', scheduleSmartQuoteConfigSave);
     sqMarginInput.addEventListener('change', () => saveSmartQuoteConfigNow(false));
