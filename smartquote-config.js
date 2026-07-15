@@ -1,7 +1,11 @@
-// Stage 2 API configuration for local real-slicer backend.
-// Keep your backend running with: python -m uvicorn app.main:app --host 127.0.0.1 --port 8000
-
+// Trini-D Smart Quote API configuration
+// Local backend options. The Smart Quote page tries these in order.
 window.TRINID_QUOTE_API_URL = "http://127.0.0.1:8000";
+window.TRINID_QUOTE_API_URLS = [
+  "http://127.0.0.1:8000",
+  "http://localhost:8000"
+];
 
-// Later, when you deploy the backend online, replace it with your HTTPS API URL, for example:
+// Future hosted backend example:
 // window.TRINID_QUOTE_API_URL = "https://api.yourdomain.com";
+// window.TRINID_QUOTE_API_URLS = ["https://api.yourdomain.com"];

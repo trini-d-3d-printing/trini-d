@@ -18,3 +18,6 @@ Admin Panel Update:
 
 
 V34: Smart Quote default infill is 10% for Ender-3 V3 Plus backend profile matching.
+
+
+Version v38: Smart Quote uses Stage 7 Creality profile backend, no browser fallback final quote, custom dropdowns.

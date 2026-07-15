@@ -19,6 +19,10 @@ const infill = $('#sqInfill');
 const quantity = $('#sqQuantity');
 const recalculateBtn = $('#recalculateBtn');
 const API_URL = (window.TRINID_QUOTE_API_URL || '').replace(/\/$/, '');
+const API_URLS = Array.isArray(window.TRINID_QUOTE_API_URLS)
+  ? window.TRINID_QUOTE_API_URLS.map(u=>String(u||'').replace(/\/$/,'')).filter(Boolean)
+  : (API_URL ? [API_URL] : []);
+let lastWorkingApiUrl = localStorage.getItem('trinid-smartquote-working-api') || '';
 let lastEstimate = null;
 
 const MATERIALS = {
@@ -55,10 +59,10 @@ function selectedSupport(){ return 'tree-auto'; }
 function apiMode(){
   const notice = $('#apiModeNotice');
   if(!notice) return;
-  if(API_URL){
-    notice.innerHTML = `<b>API status:</b> connected to ${API_URL}. Real slicer mode is used while your localhost backend is running.`;
+  if(API_URLS.length){
+    notice.innerHTML = `<b>API status:</b> local real slicer backend selected. Keep the backend CMD running. Endpoints: ${API_URLS.join(', ')}`;
   }else{
-    notice.innerHTML = '<b>API status:</b> API URL is blank. Browser fallback estimate is active.';
+    notice.innerHTML = '<b>API status:</b> Local real slicer backend is required. API URL is blank in smartquote-config.js.';
   }
 }
 
@@ -344,7 +348,7 @@ function browserEstimate(){
   const unitPrice=ceilRs(unitCost*(1+PRICING.profitMargin/100));
   const totalPrice=ceilRs(unitCost*qty*(1+PRICING.profitMargin/100));
   return {
-    source:'browser-fallback', slicerEngine:'', fileName:currentFile.name,
+    source:'browser-preliminary', slicerEngine:'', fileName:currentFile.name,
     material:materialSelect.value, color:colorSelect.value, quality:qualitySelect.options[qualitySelect.selectedIndex].text, qualityKey:qualitySelect.value,
     layerHeightMm:q.layer, wallLoops, support:supportMode, supportLabel:supportLabel(supportMode), infill:Number(infill.value), quantity:qty,
     dimensions:{x:modelData.size.x,y:modelData.size.y,z:modelData.size.z}, triangles:modelData.triangles, solidVolumeCm3:solid/1000,
@@ -364,31 +368,48 @@ async function apiEstimate(){
   fd.append('walls', String(selectedWalls()));
   fd.append('quantity', quantity.value || '1');
   fd.append('profit_margin', String(PRICING.profitMargin));
-  const res=await fetch(`${API_URL}/api/quote`, { method:'POST', body:fd });
-  let json;
-  try{ json=await res.json(); }catch{ json={ detail: await res.text() }; }
-  if(!res.ok) throw new Error(json.detail || `API error ${res.status}`);
-  const q=json.quote || {}, total=q.total || {}, unit=q.unit || {}, m=json.model || {}, settings=json.settings || {};
-  return {
-    source:json.source || 'real-slicer', slicerEngine:json.slicerEngine || '', fileName:currentFile.name,
-    material:settings.material || materialSelect.value, color:settings.color || colorSelect.value, quality:qualitySelect.options[qualitySelect.selectedIndex].text, qualityKey:qualitySelect.value,
-    layerHeightMm:settings.layerHeightMm || QUALITY[qualitySelect.value].layer, wallLoops:Number(settings.walls || settings.wallLoops || selectedWalls()), support:settings.support || selectedSupport(), supportLabel:supportLabel(settings.support || selectedSupport()), infill:Number(settings.infill || infill.value), quantity:Number(settings.quantity || quantity.value || 1),
-    dimensions:{x:m.dimensionsMm?.x || modelData.size.x, y:m.dimensionsMm?.y || modelData.size.y, z:m.dimensionsMm?.z || modelData.size.z},
-    triangles:m.triangles || modelData.triangles, solidVolumeCm3:m.solidVolumeCm3 || modelData.volumeMm3/1000,
-    printTimeMinutes:total.printTimeMinutes || 0, unitPrintTimeMinutes:unit.printTimeMinutes || 0,
-    weightG:total.weightG || 0, unitWeightG:unit.weightG || 0,
-    filamentLengthM:total.filamentLengthM || 0, unitFilamentLengthM:unit.filamentLengthM || 0,
-    unitPrice:unit.price || 0, totalPrice:total.price || 0, profitMargin:PRICING.profitMargin,
-    createdAt:new Date().toISOString(), stage:'real-slicer',
-    costBreakdown:{filament:unit.filamentCost,electricity:unit.electricityCost,machine:unit.machineCost,risk:unit.riskCost || 0,totalCost:unit.totalCost,profit:unit.profit}
-  };
+
+  const candidates = [];
+  if(lastWorkingApiUrl && API_URLS.includes(lastWorkingApiUrl)) candidates.push(lastWorkingApiUrl);
+  for(const u of API_URLS){ if(!candidates.includes(u)) candidates.push(u); }
+  if(!candidates.length) throw new Error('Smart Quote API URL is blank.');
+
+  let lastError = '';
+  for(const baseUrl of candidates){
+    try{
+      const res=await fetch(`${baseUrl}/api/quote`, { method:'POST', body:fd, mode:'cors', credentials:'omit', cache:'no-store' });
+      let json;
+      try{ json=await res.json(); }catch{ json={ detail: await res.text() }; }
+      if(!res.ok) throw new Error(json.detail || `API error ${res.status}`);
+      lastWorkingApiUrl = baseUrl;
+      localStorage.setItem('trinid-smartquote-working-api', baseUrl);
+      const q=json.quote || {}, total=q.total || {}, unit=q.unit || {}, m=json.model || {}, settings=json.settings || {};
+      return {
+        source:json.source || 'real-slicer', slicerEngine:json.slicerEngine || '', fileName:currentFile.name,
+        material:settings.material || materialSelect.value, color:settings.color || colorSelect.value, quality:qualitySelect.options[qualitySelect.selectedIndex].text, qualityKey:qualitySelect.value,
+        layerHeightMm:settings.layerHeightMm || QUALITY[qualitySelect.value].layer, wallLoops:Number(settings.walls || settings.wallLoops || selectedWalls()), support:settings.support || selectedSupport(), supportLabel:supportLabel(settings.support || selectedSupport()), infill:Number(settings.infill || infill.value), quantity:Number(settings.quantity || quantity.value || 1),
+        dimensions:{x:m.dimensionsMm?.x || modelData.size.x, y:m.dimensionsMm?.y || modelData.size.y, z:m.dimensionsMm?.z || modelData.size.z},
+        triangles:m.triangles || modelData.triangles, solidVolumeCm3:m.solidVolumeCm3 || modelData.volumeMm3/1000,
+        printTimeMinutes:total.printTimeMinutes || 0, unitPrintTimeMinutes:unit.printTimeMinutes || 0,
+        weightG:total.weightG || 0, unitWeightG:unit.weightG || 0,
+        filamentLengthM:total.filamentLengthM || 0, unitFilamentLengthM:unit.filamentLengthM || 0,
+        unitPrice:unit.price || 0, totalPrice:total.price || 0, profitMargin:PRICING.profitMargin,
+        createdAt:new Date().toISOString(), stage:'real-slicer', apiUrl:baseUrl,
+        costBreakdown:{filament:unit.filamentCost,electricity:unit.electricityCost,machine:unit.machineCost,risk:unit.riskCost || 0,totalCost:unit.totalCost,profit:unit.profit}
+      };
+    }catch(err){
+      lastError = `${baseUrl}: ${err.message || String(err)}`;
+      console.warn('Smart Quote API attempt failed:', lastError);
+    }
+  }
+  throw new Error(lastError || 'Could not connect to Smart Quote API.');
 }
 
 function renderEstimate(estimate){
   const isReal = String(estimate.source || '').includes('slicer') && !String(estimate.source || '').includes('fallback');
   const badge = $('#stageBadge');
   if(badge){
-    badge.textContent = isReal ? 'Real Slicer' : 'Fallback';
+    badge.textContent = isReal ? 'Real Slicer' : 'Backend Required';
     badge.className = `sq-stage-badge ${isReal ? 'real' : 'warn'}`;
   }
   modelData.estimate = estimate;
@@ -399,13 +420,30 @@ function renderEstimate(estimate){
   if($('#estWalls')) $('#estWalls').textContent=String(estimate.wallLoops || selectedWalls());
   if($('#estMaterial')) $('#estMaterial').textContent=estimate.material || materialSelect.value;
   $('#estPrice').textContent=`Rs ${ceilRs(estimate.totalPrice).toLocaleString()}`;
-  $('#estPriceUnit').textContent=estimate.quantity>1?`Rs ${ceilRs(estimate.unitPrice).toLocaleString()} each · ${isReal?'real slicer estimate':'browser fallback estimate'}`:(isReal?'Real slicer estimate':'Browser fallback estimate');
+  $('#estPriceUnit').textContent=estimate.quantity>1?`Rs ${ceilRs(estimate.unitPrice).toLocaleString()} each · real slicer estimate`:'Real slicer estimate';
   const bd=$('#sqBreakdown');
   if(bd){ bd.hidden=true; bd.innerHTML=''; }
   const note = $('.sq-settings-note') || $('#settingsNote');
   if(note){
-    note.textContent = estimate.apiError ? `API failed, browser fallback shown: ${estimate.apiError}` : (isReal ? 'Real slicer API result is being shown.' : 'Browser fallback is shown until the API is connected or slicer succeeds.');
+    note.textContent = isReal ? 'Real slicer API result is being shown. Tree/organic auto support is applied in the backend.' : 'Local backend is required for the final quote.';
   }
+}
+
+function showBackendError(message){
+  const badge=$('#stageBadge');
+  if(badge){ badge.textContent='Backend not connected'; badge.className='sq-stage-badge warn'; }
+  const status=$('#estimateStatus');
+  if(status) status.textContent=currentFile ? `${currentFile.name} · local backend required` : 'Local backend required';
+  const note=$('.sq-settings-note') || $('#settingsNote');
+  if(note) note.textContent=`Local backend failed: ${message}. Open http://127.0.0.1:8000/health and keep the Stage 7 backend CMD running.`;
+  $('#estTime').textContent='—';
+  $('#estWeight').textContent='—';
+  $('#estLayer').textContent=`${QUALITY[qualitySelect.value].layer.toFixed(2)} mm`;
+  if($('#estWalls')) $('#estWalls').textContent=String(selectedWalls());
+  if($('#estMaterial')) $('#estMaterial').textContent=materialSelect.value;
+  $('#estPrice').textContent='—';
+  const unit=$('#estPriceUnit');
+  if(unit) unit.textContent='Real slicer backend is required for the final quote.';
 }
 
 async function calculateEstimate(){
@@ -416,31 +454,88 @@ async function calculateEstimate(){
   if($('#estMaterial')) $('#estMaterial').textContent=materialSelect.value;
   updateMaterialCard();
   if(!modelData){ return; }
-  let estimate;
   try{
-    if(API_URL){
-      showLoading('Sending STL to Smart Quote API…');
-      estimate=await apiEstimate();
-    }else{
-      estimate=browserEstimate();
+    if(!API_URLS.length){
+      throw new Error('Smart Quote API URL is blank in smartquote-config.js.');
     }
+    showLoading('Sending STL to local PrusaSlicer backend…');
+    const estimate=await apiEstimate();
+    renderEstimate(estimate);
   }catch(err){
     console.warn(err);
-    estimate=browserEstimate();
-    estimate.apiError=err.message || String(err);
+    showBackendError(err.message || String(err));
   }finally{
     hideLoading();
   }
-  renderEstimate(estimate);
 }
 
 function updateMaterialCard(){
   const mat=MATERIALS[materialSelect.value];
   $('#materialTitle').textContent=materialSelect.value; if($('#estMaterial')) $('#estMaterial').textContent=materialSelect.value; $('#materialDescription').textContent=mat.description; $('#materialDensity').textContent=`${mat.density.toFixed(2)} g/cm³`; $('#materialPrice').textContent=`Rs ${mat.priceKg.toLocaleString()}/kg`; $('#materialBestFor').textContent=mat.best;
-  const current=colorSelect.value; colorSelect.innerHTML=mat.colors.map(c=>`<option value="${c}">${c}</option>`).join(''); if(mat.colors.includes(current)) colorSelect.value=current; else colorSelect.value=mat.colors[0];
+  const current=colorSelect.value; colorSelect.innerHTML=mat.colors.map(c=>`<option value="${c}">${c}</option>`).join(''); if(mat.colors.includes(current)) colorSelect.value=current; else colorSelect.value=mat.colors[0]; refreshCustomSelect(colorSelect); refreshCustomSelect(materialSelect);
   const orb=$('#materialOrb'); const c=MODEL_COLORS[colorSelect.value]||0x202329; orb.style.setProperty('--orb-color',`#${c.toString(16).padStart(6,'0')}`);
 }
 function syncOrbColor(){ const c=MODEL_COLORS[colorSelect.value]||0x202329; const hex=`#${c.toString(16).padStart(6,'0')}`; $('#materialOrb span').style.background=`linear-gradient(145deg, color-mix(in srgb, ${hex} 70%, white), ${hex})`; }
+
+
+function closeAllCustomSelects(except){
+  document.querySelectorAll('.td-select.open').forEach(w=>{ if(w!==except) w.classList.remove('open'); });
+}
+function refreshCustomSelect(select){
+  const wrapper=select?.closest?.('.td-select');
+  if(wrapper && wrapper._tdRender) wrapper._tdRender();
+}
+function enhanceSelect(select){
+  if(!select || select.dataset.tdEnhanced==='1') return;
+  const wrapper=document.createElement('div');
+  wrapper.className='td-select';
+  select.parentNode.insertBefore(wrapper, select);
+  wrapper.appendChild(select);
+  select.classList.add('td-native-select');
+  select.dataset.tdEnhanced='1';
+  const button=document.createElement('button');
+  button.type='button';
+  button.className='td-select-button';
+  const menu=document.createElement('div');
+  menu.className='td-select-menu';
+  wrapper.appendChild(button);
+  wrapper.appendChild(menu);
+  const render=()=>{
+    const selected=select.options[select.selectedIndex];
+    button.textContent=selected ? selected.textContent : 'Select';
+    menu.innerHTML='';
+    Array.from(select.options).forEach(opt=>{
+      const item=document.createElement('button');
+      item.type='button';
+      item.className='td-select-option';
+      item.textContent=opt.textContent;
+      item.dataset.value=opt.value;
+      if(opt.value===select.value) item.classList.add('selected');
+      item.addEventListener('click',()=>{
+        select.value=opt.value;
+        wrapper.classList.remove('open');
+        select.dispatchEvent(new Event('change',{bubbles:true}));
+        render();
+      });
+      menu.appendChild(item);
+    });
+  };
+  wrapper._tdRender=render;
+  button.addEventListener('click',e=>{
+    e.preventDefault();
+    e.stopPropagation();
+    const willOpen=!wrapper.classList.contains('open');
+    closeAllCustomSelects(wrapper);
+    wrapper.classList.toggle('open', willOpen);
+  });
+  select.addEventListener('change',render);
+  render();
+}
+function initCustomSelects(){
+  [materialSelect, qualitySelect, colorSelect, wallSelect].forEach(enhanceSelect);
+}
+document.addEventListener('click',()=>closeAllCustomSelects());
+document.addEventListener('keydown',e=>{ if(e.key==='Escape') closeAllCustomSelects(); });
 
 uploadZone.addEventListener('click',()=>fileInput.click());
 uploadZone.addEventListener('keydown',e=>{ if(e.key==='Enter'||e.key===' '){e.preventDefault();fileInput.click();} });
@@ -465,6 +560,7 @@ canvas.addEventListener('webglcontextrestored',()=>{ resizeViewer(); if(mesh) fi
 
 resetSmartQuoteIdleState();
 apiMode();
+initCustomSelects();
 updateMaterialCard();
 colorSelect.value='Black';
 syncOrbColor();
