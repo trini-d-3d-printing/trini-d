@@ -148,6 +148,42 @@ function activeMaterialProfile() {
   return db.materialProfiles[selectedMaterialProfileName()];
 }
 
+function publicSmartQuotePricingProfiles() {
+  normalizeMaterialProfiles(db);
+  const publicMap = {
+    'PLA+': 'PLA+',
+    // The customer-facing PETG+ option uses the business PETG+ HS profile.
+    'PETG+': db.materialProfiles['PETG+ HS'] ? 'PETG+ HS' : (db.materialProfiles['PETG'] ? 'PETG' : 'PETG+ HS')
+  };
+  const cleanProfile = (profileName) => {
+    const source = db.materialProfiles[profileName] || {};
+    return {
+      profileName,
+      P: num(source.P),
+      rho: num(source.rho),
+      d_mm: num(source.d_mm),
+      W: num(source.W),
+      R: num(source.R),
+      Cp: num(source.Cp),
+      H: num(source.H),
+      F: num(source.F),
+      Cups: num(source.Cups),
+      Hups: num(source.Hups)
+    };
+  };
+  return Object.fromEntries(Object.entries(publicMap).map(([publicName, profileName]) => [publicName, cleanProfile(profileName)]));
+}
+
+async function publishSmartQuotePricingProfiles() {
+  if (!firebaseStore || !firebaseUser || applyingRemote) return;
+  await firebaseStore.doc(SMARTQUOTE_CONFIG_DOC_PATH).set({
+    pricingProfiles: firestoreSafe(publicSmartQuotePricingProfiles()),
+    pricingUpdatedAt: firebase.firestore.FieldValue.serverTimestamp(),
+    pricingUpdatedBy: firebaseUser.email || firebaseUser.uid,
+    pricingSchemaVersion: 2
+  }, { merge: true });
+}
+
 
 const calcFingerprint = result => JSON.stringify({
   customer: (result.customer || '').trim().toLowerCase(),
@@ -332,9 +368,11 @@ async function saveSmartQuoteConfigNow(showToast = true) {
     await firebaseStore.doc(SMARTQUOTE_CONFIG_DOC_PATH).set({
       profitMargin: margin,
       backendApiUrl,
+      pricingProfiles: firestoreSafe(publicSmartQuotePricingProfiles()),
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
       updatedBy: firebaseUser.email || firebaseUser.uid,
-      schemaVersion: 1
+      pricingSchemaVersion: 2,
+      schemaVersion: 2
     }, { merge: true });
     renderSmartQuoteConfig(true);
     if (showToast) toast(`Smart Quote settings saved`);
@@ -434,6 +472,9 @@ async function writeCloudNow() {
       replaceMode: true,
       schemaVersion: 5
     });
+    // Keep the public Smart Quote pricing inputs synchronized with the same
+    // operational material profiles used by the Admin Price Calculator.
+    await publishSmartQuotePricingProfiles();
     cloudReady = true;
     setCloudStatus('Cloud: saved / replaced latest database', 'ok');
   } catch (err) {
