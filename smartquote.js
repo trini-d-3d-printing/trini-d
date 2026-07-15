@@ -39,6 +39,10 @@ let API_URLS = [];
 let lastWorkingApiUrl = normalizeApiUrl(localStorage.getItem('trinid-smartquote-working-api'));
 let lastEstimate = null;
 let PUBLIC_PRICING_PROFILES = {};
+let SMARTQUOTE_PRICING_SCHEMA_VERSION = 0;
+let smartQuoteConfigLoaded = false;
+let resolveSmartQuoteConfigReady;
+const smartQuoteConfigReady = new Promise(resolve => { resolveSmartQuoteConfigReady = resolve; });
 const apiHealthCache = new Map();
 
 function setConfiguredApiUrl(cloudUrl = ''){
@@ -72,12 +76,12 @@ function setConfiguredApiUrl(cloudUrl = ''){
 }
 
 const MATERIALS = {
-  'PLA+': { density: 1.25, priceKg: 5400, colors: ['Black','White','Gray','Red','Blue','Green','Yellow','Orange','Gold','Silver','Transparent','Natural'], best: 'General purpose', description: 'Reliable general-purpose material for prototypes, models, gifts and everyday functional parts.' },
-  'PLA':  { density: 1.24, priceKg: 5000, colors: ['Black','White','Gray','Red','Blue','Green'], best: 'Models & prototypes', description: 'Easy-printing material for visual models, prototypes and low-load functional parts.' },
-  'PETG+': { density: 1.27, priceKg: 6200, colors: ['Black','White','Gray','Red','Blue','Green','Yellow','Orange','Gold','Silver','Transparent','Natural'], best: 'Durable parts', description: 'Tougher PETG+ material with good layer adhesion for practical and more durable components.' },
-  'PETG': { density: 1.27, priceKg: 6200, colors: ['Black','White','Gray','Transparent','Blue'], best: 'Durable parts', description: 'Tougher material with good layer adhesion for practical and more durable components.' },
-  'TPU':  { density: 1.21, priceKg: 7500, colors: ['Black','White','Red','Blue'], best: 'Flexible parts', description: 'Flexible material for grips, bumpers, soft-touch parts and components that need bending.' },
-  'ABS':  { density: 1.04, priceKg: 5800, colors: ['Black','White','Gray'], best: 'Technical parts', description: 'Technical material for stronger parts where the print setup and model geometry are suitable.' }
+  'PLA+': { colors: ['Black','White','Gray','Red','Blue','Green','Yellow','Orange','Gold','Silver','Transparent','Natural'] },
+  'PLA':  { colors: ['Black','White','Gray','Red','Blue','Green'] },
+  'PETG+': { colors: ['Black','White','Gray','Red','Blue','Green','Yellow','Orange','Gold','Silver','Transparent','Natural'] },
+  'PETG': { colors: ['Black','White','Gray','Transparent','Blue'] },
+  'TPU':  { colors: ['Black','White','Red','Blue'] },
+  'ABS':  { colors: ['Black','White','Gray'] }
 };
 const QUALITY = {
   draft:    { layer: 0.28, timeFactor: 0.82, flow: 6.2 },
@@ -86,7 +90,7 @@ const QUALITY = {
   ultra:    { layer: 0.12, timeFactor: 1.55, flow: 4.4 }
 };
 const MODEL_COLORS = { Black:0x4a4f59, White:0xe7e9ed, Gray:0x7a808b, Red:0xc63a3a, Blue:0x315dca, Green:0x3f8d55, Yellow:0xf0d247, Orange:0xe87425, Gold:0xd6a11d, Silver:0xb8bec8, Transparent:0x9fcbd0, Natural:0xe6d2a8 };
-const PRICING = { powerW:150, electricityPerKWh:70, printerCost:140000, printerLifeHours:2000, profitMargin:75, filamentDiameterMm:1.75 };
+const PRICING = { profitMargin:75 };
 const SMARTQUOTE_CONFIG_DOC_PATH = 'trinid/default/public/smartquote';
 let smartQuoteConfigUnsubscribe = null;
 
@@ -131,15 +135,15 @@ function normalizeCloudProfitMargin(value){
 
 function normalizePublicPricingProfile(raw, fallbackName=''){
   if(!raw || typeof raw !== 'object') return null;
-  const number = (key, fallback=0) => {
+  const number = (key, fallback=Number.NaN) => {
     const value = Number(String(raw[key] ?? fallback).replace(/,/g,'').trim());
-    return Number.isFinite(value) ? value : fallback;
+    return Number.isFinite(value) ? value : Number.NaN;
   };
-  return {
+  const profile = {
     profileName: String(raw.profileName || fallbackName || '').trim(),
     P: number('P'),
-    rho: number('rho', 1.24),
-    d_mm: number('d_mm', 1.75),
+    rho: number('rho'),
+    d_mm: number('d_mm'),
     W: number('W'),
     R: number('R'),
     Cp: number('Cp'),
@@ -148,6 +152,25 @@ function normalizePublicPricingProfile(raw, fallbackName=''){
     Cups: number('Cups'),
     Hups: number('Hups')
   };
+  const valid = profile.profileName &&
+    profile.P > 0 && profile.rho > 0 && profile.d_mm > 0 &&
+    profile.W >= 0 && profile.R >= 0 && profile.Cp >= 0 && profile.H > 0 &&
+    profile.F >= 0 && profile.F < 1 && profile.Cups >= 0 && profile.Hups >= 0;
+  return valid ? profile : null;
+}
+
+function finishSmartQuoteConfigLoad(){
+  if(smartQuoteConfigLoaded) return;
+  smartQuoteConfigLoaded = true;
+  if(resolveSmartQuoteConfigReady) resolveSmartQuoteConfigReady();
+}
+
+async function waitForSmartQuoteConfig(timeoutMs=12000){
+  if(smartQuoteConfigLoaded) return;
+  await Promise.race([
+    smartQuoteConfigReady,
+    new Promise((_, reject)=>setTimeout(()=>reject(new Error('Pricing settings did not load from Admin. Refresh the page and try again.')), timeoutMs))
+  ]);
 }
 
 function setPublicPricingProfiles(raw){
@@ -169,7 +192,8 @@ function selectedPublicPricingProfile(){
 
 async function initSmartQuoteCloudConfig(){
   if(!window.firebase || !window.TRINID_FIREBASE_CONFIG){
-    console.warn('Smart Quote cloud margin unavailable; using fallback 75%.');
+    console.error('Smart Quote Firebase configuration is unavailable.');
+    finishSmartQuoteConfigLoad();
     return;
   }
   try{
@@ -185,15 +209,19 @@ async function initSmartQuoteCloudConfig(){
       const nextMargin=normalizeCloudProfitMargin(data.profitMargin);
       const marginChanged=nextMargin!==PRICING.profitMargin;
       PRICING.profitMargin=nextMargin;
+      SMARTQUOTE_PRICING_SCHEMA_VERSION=Number(data.pricingSchemaVersion || 0) || 0;
       const apiChanged=setConfiguredApiUrl(data.backendApiUrl || data.publicApiUrl || '');
       const pricingChanged=setPublicPricingProfiles(data.pricingProfiles || {});
+      finishSmartQuoteConfigLoad();
       if((marginChanged || apiChanged || pricingChanged) && modelData) markEstimatePending('Pricing/settings updated. Click Estimate Price again.');
-      console.info(`Smart Quote config synced: margin ${PRICING.profitMargin}%, API ${API_URLS[0] || 'not configured'}, public pricing ${Object.keys(PUBLIC_PRICING_PROFILES).join(', ') || 'fallback'}`);
+      console.info(`Smart Quote config synced: margin ${PRICING.profitMargin}%, API ${API_URLS[0] || 'not configured'}, schema ${SMARTQUOTE_PRICING_SCHEMA_VERSION}, public pricing ${Object.keys(PUBLIC_PRICING_PROFILES).join(', ') || 'missing'}`);
     },err=>{
-      console.warn('Smart Quote margin listener failed; using current fallback.',err);
+      console.error('Smart Quote pricing listener failed.',err);
+      finishSmartQuoteConfigLoad();
     });
   }catch(err){
-    console.warn('Smart Quote anonymous cloud config failed; using fallback 75%.',err);
+    console.error('Smart Quote anonymous cloud config failed.',err);
+    finishSmartQuoteConfigLoad();
   }
 }
 
@@ -401,47 +429,7 @@ async function loadSTL(file){
   finally{ loading.hidden=true; setAnalysisStatus('Analyzing model…'); if(mesh){ resizeViewer(); fitCamera(); renderer.render(scene,camera); } }
 }
 
-function browserEstimate(){
-  const q=QUALITY[qualitySelect.value];
-  const mat=MATERIALS[materialSelect.value];
-  const infillRatio=Number(infill.value)/100;
-  const wallLoops=selectedWalls();
-  const supportMode=selectedSupport();
-  const supportFactor=supportMode==='normal-auto'?1.25:(supportMode==='buildplate-tree'?1.14:1.18);
-  const qty=clamp(parseInt(quantity.value||'1',10)||1,1,100);
-  quantity.value=qty;
-  const solid=modelData.volumeMm3;
-  const surface=modelData.surfaceAreaMm2;
-  const shellThickness=(0.45*wallLoops)*Math.pow(0.20/q.layer,0.08);
-  const shellVolume=Math.min(solid*0.72,surface*shellThickness);
-  const inner=Math.max(0,solid-shellVolume);
-  const extrusionVolume=(shellVolume+inner*infillRatio)*1.08*supportFactor;
-  const weightG=extrusionVolume/1000*mat.density;
-  const filamentArea=Math.PI*Math.pow(PRICING.filamentDiameterMm/2,2);
-  const lengthM=extrusionVolume/filamentArea/1000;
-  const complexity=clamp(1+(surface/Math.max(solid,1))*0.9,1,1.45);
-  const layers=Math.max(1,modelData.size.z/q.layer);
-  const timeSeconds=(extrusionVolume/q.flow)*q.timeFactor*complexity*1.16*supportFactor + layers*2.5;
-  const timeMinutes=timeSeconds/60;
-  const hours=timeMinutes/60;
-  const filamentCost=weightG/1000*mat.priceKg;
-  const electricityCost=hours*(PRICING.powerW/1000)*PRICING.electricityPerKWh;
-  const machineCost=hours*(PRICING.printerCost/PRICING.printerLifeHours);
-  const unitCost=filamentCost+electricityCost+machineCost;
-  const unitPrice=ceilRs(unitCost*(1+PRICING.profitMargin/100));
-  const totalPrice=ceilRs(unitCost*qty*(1+PRICING.profitMargin/100));
-  return {
-    source:'browser-preliminary', slicerEngine:'', fileName:currentFile.name,
-    material:materialSelect.value, color:colorSelect.value, quality:qualitySelect.options[qualitySelect.selectedIndex].text, qualityKey:qualitySelect.value,
-    layerHeightMm:q.layer, wallLoops, support:supportMode, supportLabel:supportLabel(supportMode), infill:Number(infill.value), quantity:qty,
-    dimensions:{x:modelData.size.x,y:modelData.size.y,z:modelData.size.z}, triangles:modelData.triangles, solidVolumeCm3:solid/1000,
-    printTimeMinutes:timeMinutes*qty, unitPrintTimeMinutes:timeMinutes, weightG:weightG*qty, unitWeightG:weightG, filamentLengthM:lengthM*qty, unitFilamentLengthM:lengthM,
-    unitPrice,totalPrice, profitMargin:PRICING.profitMargin, createdAt:new Date().toISOString(), stage:'browser-preliminary',
-    costBreakdown:{filament:ceilRs(filamentCost),electricity:ceilRs(electricityCost),machine:ceilRs(machineCost),risk:0,totalCost:ceilRs(unitCost),profit:ceilRs(unitPrice-unitCost)}
-  };
-}
-
-function buildQuoteFormData(){
+function buildQuoteFormData(publicProfile){
   const fd=new FormData();
   fd.append('model_file', currentFile, currentFile.name);
   fd.append('material', materialSelect.value);
@@ -451,9 +439,36 @@ function buildQuoteFormData(){
   fd.append('walls', String(selectedWalls()));
   fd.append('quantity', quantity.value || '1');
   fd.append('profit_margin', String(PRICING.profitMargin));
-  const publicProfile=selectedPublicPricingProfile();
-  if(publicProfile) fd.append('pricing_profile', JSON.stringify(publicProfile));
+  fd.append('pricing_schema_version', String(SMARTQUOTE_PRICING_SCHEMA_VERSION));
+  fd.append('pricing_profile', JSON.stringify(publicProfile));
   return fd;
+}
+
+function sameNumber(a,b,tolerance=1e-9){
+  const left=Number(a), right=Number(b);
+  return Number.isFinite(left) && Number.isFinite(right) && Math.abs(left-right)<=tolerance;
+}
+
+function assertBackendPricingParity(json, expectedProfile){
+  if(!json?.pricingApplied) throw new Error('Backend refused the current Admin pricing profile. No estimate was shown.');
+  const applied=json?.quote?.pricing || {};
+  const checks=[
+    ['material price', applied.material_price_rs_kg ?? json?.quote?.materialProfile?.priceRsKg, expectedProfile.P],
+    ['material density', applied.material_density_g_cm3 ?? json?.quote?.materialProfile?.densityGcm3, expectedProfile.rho],
+    ['filament diameter', applied.filament_diameter_mm, expectedProfile.d_mm],
+    ['printer power', applied.power_w, expectedProfile.W],
+    ['electricity rate', applied.electricity_rs_kwh, expectedProfile.R],
+    ['printer cost', applied.printer_cost_rs, expectedProfile.Cp],
+    ['printer lifetime', applied.printer_lifetime_hours, expectedProfile.H],
+    ['failure risk', applied.failure_risk, expectedProfile.F],
+    ['UPS cost', applied.ups_cost_rs, expectedProfile.Cups],
+    ['UPS lifetime', applied.ups_lifetime_hours, expectedProfile.Hups],
+    ['profit margin', applied.profit_margin_percent, PRICING.profitMargin]
+  ];
+  const mismatch=checks.find(([,actual,expected])=>!sameNumber(actual,expected));
+  if(mismatch){
+    throw new Error(`Pricing synchronization failed for ${mismatch[0]}. Refresh Admin, save Smart Quote Settings, then retry.`);
+  }
 }
 
 async function fetchWithTimeout(url, options = {}, timeoutMs = 15000){
@@ -485,7 +500,7 @@ async function verifyApiHealth(baseUrl){
   apiHealthCache.set(baseUrl, Date.now());
 }
 
-async function apiEstimate(){
+async function apiEstimate(publicProfile){
   const candidates = [];
   if(lastWorkingApiUrl && API_URLS.includes(lastWorkingApiUrl)) candidates.push(lastWorkingApiUrl);
   for(const u of API_URLS){ if(!candidates.includes(u)) candidates.push(u); }
@@ -496,7 +511,7 @@ async function apiEstimate(){
     try{
       await verifyApiHealth(baseUrl);
       const res=await fetchWithTimeout(`${baseUrl}/api/quote`, {
-        method:'POST', body:buildQuoteFormData(), mode:'cors', credentials:'omit', cache:'no-store'
+        method:'POST', body:buildQuoteFormData(publicProfile), mode:'cors', credentials:'omit', cache:'no-store'
       }, 330000);
       let json;
       const responseText = await res.text();
@@ -504,6 +519,7 @@ async function apiEstimate(){
       catch{ json={detail:responseText || `API returned HTTP ${res.status}`}; }
       if(!res.ok) throw new Error(json.detail || `API returned HTTP ${res.status}`);
       if(!json?.ok) throw new Error(json?.detail || 'API returned an invalid quote response.');
+      assertBackendPricingParity(json, publicProfile);
       lastWorkingApiUrl = baseUrl;
       localStorage.setItem('trinid-smartquote-working-api', baseUrl);
       const q=json.quote || {}, total=q.total || {}, unit=q.unit || {}, m=json.model || {}, settings=json.settings || {};
@@ -597,10 +613,14 @@ async function calculateEstimate(){
   $('#infillValue').textContent=`${infill.value}%`;
   if(!modelData) return;
   try{
+    await waitForSmartQuoteConfig();
     if(!API_URLS.length) throw new Error('Public Smart Quote API URL is not configured.');
+    if(SMARTQUOTE_PRICING_SCHEMA_VERSION < 3) throw new Error('Admin pricing settings are outdated. Open Admin, hard-refresh, and save Smart Quote Settings once.');
+    const publicProfile=selectedPublicPricingProfile();
+    if(!publicProfile) throw new Error(`The Admin pricing profile for ${materialSelect.value} is not published. Open Admin, hard-refresh, and save Smart Quote Settings.`);
     if(estimatePriceBtn){ estimatePriceBtn.disabled=true; estimatePriceBtn.textContent='Estimating…'; }
-    showLoading('Sending STL to the Smart Quote slicer backend…');
-    const estimate=await apiEstimate();
+    showLoading('Sending STL and the exact Admin pricing profile to the slicer backend…');
+    const estimate=await apiEstimate(publicProfile);
     renderEstimate(estimate);
   }catch(err){
     console.warn(err);
