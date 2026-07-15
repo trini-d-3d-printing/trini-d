@@ -615,9 +615,9 @@ async function calculateEstimate(){
   try{
     await waitForSmartQuoteConfig();
     if(!API_URLS.length) throw new Error('Public Smart Quote API URL is not configured.');
-    if(SMARTQUOTE_PRICING_SCHEMA_VERSION < 3) throw new Error('Admin pricing settings are outdated. Open Admin, hard-refresh, and save Smart Quote Settings once.');
+    if(SMARTQUOTE_PRICING_SCHEMA_VERSION < 2) throw new Error('Smart Quote pricing settings are missing. Save the existing Smart Quote settings once in Admin.');
     const publicProfile=selectedPublicPricingProfile();
-    if(!publicProfile) throw new Error(`The Admin pricing profile for ${materialSelect.value} is not published. Open Admin, hard-refresh, and save Smart Quote Settings.`);
+    if(!publicProfile) throw new Error(`The pricing profile for ${materialSelect.value} is not available in the existing Smart Quote settings.`);
     if(estimatePriceBtn){ estimatePriceBtn.disabled=true; estimatePriceBtn.textContent='Estimating…'; }
     showLoading('Sending STL and the exact Admin pricing profile to the slicer backend…');
     const estimate=await apiEstimate(publicProfile);
