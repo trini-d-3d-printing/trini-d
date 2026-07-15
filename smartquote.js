@@ -18,12 +18,57 @@ const wallSelect = $('#sqWalls');
 const infill = $('#sqInfill');
 const quantity = $('#sqQuantity');
 const recalculateBtn = $('#recalculateBtn');
-const API_URL = (window.TRINID_QUOTE_API_URL || '').replace(/\/$/, '');
-const API_URLS = Array.isArray(window.TRINID_QUOTE_API_URLS)
-  ? window.TRINID_QUOTE_API_URLS.map(u=>String(u||'').replace(/\/$/,'')).filter(Boolean)
-  : (API_URL ? [API_URL] : []);
-let lastWorkingApiUrl = localStorage.getItem('trinid-smartquote-working-api') || '';
+function normalizeApiUrl(value){
+  return String(value || '').trim().replace(/\/+$/, '');
+}
+
+function isLocalApiUrl(value){
+  try{
+    const url = new URL(value);
+    return url.hostname === '127.0.0.1' || url.hostname === 'localhost';
+  }catch{
+    return false;
+  }
+}
+
+function isLocalPage(){
+  return location.protocol === 'file:' || location.hostname === '127.0.0.1' || location.hostname === 'localhost';
+}
+
+let API_URLS = [];
+let lastWorkingApiUrl = normalizeApiUrl(localStorage.getItem('trinid-smartquote-working-api'));
 let lastEstimate = null;
+const apiHealthCache = new Map();
+
+function setConfiguredApiUrl(cloudUrl = ''){
+  const next = [];
+  const add = (value) => {
+    const url = normalizeApiUrl(value);
+    if(!url || next.includes(url)) return;
+    // A public HTTPS page must use a public HTTPS API. Local HTTP endpoints are
+    // kept only for localhost/file testing so they cannot hide the real error.
+    if(!isLocalPage() && isLocalApiUrl(url)) return;
+    if(!isLocalPage() && !/^https:\/\//i.test(url)) return;
+    next.push(url);
+  };
+
+  // Firebase Admin value has first priority. The bundled config remains a safe
+  // fallback when Firebase is unavailable, blank, cached, or still updating.
+  add(cloudUrl);
+  add(window.TRINID_QUOTE_API_URL);
+  if(Array.isArray(window.TRINID_QUOTE_API_URLS)){
+    window.TRINID_QUOTE_API_URLS.forEach(add);
+  }
+
+  const changed = next.join('|') !== API_URLS.join('|');
+  API_URLS = next;
+  if(lastWorkingApiUrl && !API_URLS.includes(lastWorkingApiUrl)){
+    lastWorkingApiUrl = '';
+    localStorage.removeItem('trinid-smartquote-working-api');
+  }
+  apiMode();
+  return changed;
+}
 
 const MATERIALS = {
   'PLA+': { density: 1.25, priceKg: 5400, colors: ['Black','White','Gray','Red','Blue','Green','Yellow','Orange','Gold','Silver','Transparent','Natural'], best: 'General purpose', description: 'Reliable general-purpose material for prototypes, models, gifts and everyday functional parts.' },
@@ -60,9 +105,10 @@ function apiMode(){
   const notice = $('#apiModeNotice');
   if(!notice) return;
   if(API_URLS.length){
-    notice.innerHTML = `<b>API status:</b> local real slicer backend selected. Keep the backend CMD running. Endpoints: ${API_URLS.join(', ')}`;
+    const mode = isLocalPage() ? 'local/public' : 'public HTTPS';
+    notice.innerHTML = `<b>API status:</b> ${mode} backend configured. Endpoint: ${API_URLS[0]}`;
   }else{
-    notice.innerHTML = '<b>API status:</b> Local real slicer backend is required. API URL is blank in smartquote-config.js.';
+    notice.innerHTML = '<b>API status:</b> Public Smart Quote backend URL is not configured.';
   }
 }
 
@@ -100,8 +146,8 @@ async function initSmartQuoteCloudConfig(){
       const nextMargin=normalizeCloudProfitMargin(data.profitMargin);
       const changed=nextMargin!==PRICING.profitMargin;
       PRICING.profitMargin=nextMargin;
-      setConfiguredApiUrl(data.backendApiUrl || data.publicApiUrl || '');
-      if(changed && modelData) calculateEstimate();
+      const apiChanged=setConfiguredApiUrl(data.backendApiUrl || data.publicApiUrl || '');
+      if((changed || apiChanged) && modelData) calculateEstimate();
       console.info(`Smart Quote config synced: margin ${PRICING.profitMargin}%, API ${API_URLS[0] || 'not configured'}`);
     },err=>{
       console.warn('Smart Quote margin listener failed; using current fallback.',err);
@@ -359,7 +405,7 @@ function browserEstimate(){
   };
 }
 
-async function apiEstimate(){
+function buildQuoteFormData(){
   const fd=new FormData();
   fd.append('model_file', currentFile, currentFile.name);
   fd.append('material', materialSelect.value);
@@ -369,19 +415,57 @@ async function apiEstimate(){
   fd.append('walls', String(selectedWalls()));
   fd.append('quantity', quantity.value || '1');
   fd.append('profit_margin', String(PRICING.profitMargin));
+  return fd;
+}
 
+async function fetchWithTimeout(url, options = {}, timeoutMs = 15000){
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort(), timeoutMs);
+  try{
+    return await fetch(url, {...options, signal: controller.signal});
+  }catch(err){
+    if(err?.name === 'AbortError') throw new Error(`Request timed out after ${Math.round(timeoutMs/1000)} seconds`);
+    throw err;
+  }finally{
+    clearTimeout(timer);
+  }
+}
+
+async function verifyApiHealth(baseUrl){
+  const cachedAt = apiHealthCache.get(baseUrl) || 0;
+  if(Date.now() - cachedAt < 60000) return;
+  const res = await fetchWithTimeout(`${baseUrl}/health`, {
+    method:'GET', mode:'cors', credentials:'omit', cache:'no-store'
+  }, 12000);
+  let json = null;
+  try{ json = await res.json(); }catch{}
+  if(!res.ok) throw new Error(`health check returned HTTP ${res.status}`);
+  if(json && json.ok === false) throw new Error(json.detail || 'health check reported unavailable');
+  if(json && json.readyForQuotes === false){
+    throw new Error(`backend is online but the slicer is not ready (PrusaSlicer: ${json.prusaPathFound ? 'found' : 'missing'}, profile: ${json.configFound ? 'found' : 'missing'})`);
+  }
+  apiHealthCache.set(baseUrl, Date.now());
+}
+
+async function apiEstimate(){
   const candidates = [];
   if(lastWorkingApiUrl && API_URLS.includes(lastWorkingApiUrl)) candidates.push(lastWorkingApiUrl);
   for(const u of API_URLS){ if(!candidates.includes(u)) candidates.push(u); }
-  if(!candidates.length) throw new Error('Smart Quote API URL is blank.');
+  if(!candidates.length) throw new Error('Public Smart Quote API URL is blank.');
 
-  let lastError = '';
+  const errors = [];
   for(const baseUrl of candidates){
     try{
-      const res=await fetch(`${baseUrl}/api/quote`, { method:'POST', body:fd, mode:'cors', credentials:'omit', cache:'no-store' });
+      await verifyApiHealth(baseUrl);
+      const res=await fetchWithTimeout(`${baseUrl}/api/quote`, {
+        method:'POST', body:buildQuoteFormData(), mode:'cors', credentials:'omit', cache:'no-store'
+      }, 330000);
       let json;
-      try{ json=await res.json(); }catch{ json={ detail: await res.text() }; }
-      if(!res.ok) throw new Error(json.detail || `API error ${res.status}`);
+      const responseText = await res.text();
+      try{ json=responseText ? JSON.parse(responseText) : {}; }
+      catch{ json={detail:responseText || `API returned HTTP ${res.status}`}; }
+      if(!res.ok) throw new Error(json.detail || `API returned HTTP ${res.status}`);
+      if(!json?.ok) throw new Error(json?.detail || 'API returned an invalid quote response.');
       lastWorkingApiUrl = baseUrl;
       localStorage.setItem('trinid-smartquote-working-api', baseUrl);
       const q=json.quote || {}, total=q.total || {}, unit=q.unit || {}, m=json.model || {}, settings=json.settings || {};
@@ -399,11 +483,13 @@ async function apiEstimate(){
         costBreakdown:{filament:unit.filamentCost,electricity:unit.electricityCost,machine:unit.machineCost,risk:unit.riskCost || 0,totalCost:unit.totalCost,profit:unit.profit}
       };
     }catch(err){
-      lastError = `${baseUrl}: ${err.message || String(err)}`;
-      console.warn('Smart Quote API attempt failed:', lastError);
+      const reason = err?.message || String(err);
+      errors.push(`${baseUrl}: ${reason}`);
+      apiHealthCache.delete(baseUrl);
+      console.warn('Smart Quote API attempt failed:', baseUrl, err);
     }
   }
-  throw new Error(lastError || 'Could not connect to Smart Quote API.');
+  throw new Error(errors.join(' | ') || 'Could not connect to the Smart Quote API.');
 }
 
 function renderEstimate(estimate){
@@ -426,7 +512,7 @@ function renderEstimate(estimate){
   if(bd){ bd.hidden=true; bd.innerHTML=''; }
   const note = $('.sq-settings-note') || $('#settingsNote');
   if(note){
-    note.textContent = isReal ? 'Real slicer API result is being shown. Tree/organic auto support is applied in the backend.' : 'Local backend is required for the final quote.';
+    note.textContent = isReal ? 'Real slicer API result is being shown. Tree/organic auto support is applied in the backend.' : 'The Smart Quote backend is required for the final quote.';
   }
 }
 
@@ -434,9 +520,9 @@ function showBackendError(message){
   const badge=$('#stageBadge');
   if(badge){ badge.textContent='Backend not connected'; badge.className='sq-stage-badge warn'; }
   const status=$('#estimateStatus');
-  if(status) status.textContent=currentFile ? `${currentFile.name} · local backend required` : 'Local backend required';
+  if(status) status.textContent=currentFile ? `${currentFile.name} · backend unavailable` : 'Backend unavailable';
   const note=$('.sq-settings-note') || $('#settingsNote');
-  if(note) note.textContent=`Local backend failed: ${message}. For public customer access, configure the public HTTPS backend URL in Admin > Export / Settings. Localhost works only on this same PC.`;
+  if(note) note.textContent=`Smart Quote backend failed: ${message}`;
   $('#estTime').textContent='—';
   $('#estWeight').textContent='—';
   $('#estLayer').textContent=`${QUALITY[qualitySelect.value].layer.toFixed(2)} mm`;
@@ -444,7 +530,7 @@ function showBackendError(message){
   if($('#estMaterial')) $('#estMaterial').textContent=materialSelect.value;
   $('#estPrice').textContent='—';
   const unit=$('#estPriceUnit');
-  if(unit) unit.textContent='Real slicer backend is required for the final quote.';
+  if(unit) unit.textContent='The Smart Quote backend is required for the final quote.';
 }
 
 async function calculateEstimate(){
@@ -457,9 +543,9 @@ async function calculateEstimate(){
   if(!modelData){ return; }
   try{
     if(!API_URLS.length){
-      throw new Error('Smart Quote API URL is blank in smartquote-config.js.');
+      throw new Error('Public Smart Quote API URL is not configured.');
     }
-    showLoading('Sending STL to local PrusaSlicer backend…');
+    showLoading('Sending STL to the Smart Quote slicer backend…');
     const estimate=await apiEstimate();
     renderEstimate(estimate);
   }catch(err){
@@ -560,6 +646,7 @@ canvas.addEventListener('webglcontextlost',e=>{ e.preventDefault(); console.warn
 canvas.addEventListener('webglcontextrestored',()=>{ resizeViewer(); if(mesh) fitCamera(); });
 
 resetSmartQuoteIdleState();
+setConfiguredApiUrl();
 apiMode();
 initCustomSelects();
 updateMaterialCard();
