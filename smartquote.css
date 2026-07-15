@@ -30,3 +30,31 @@
 
 /* v27: reliable STL preview canvas visibility after upload. */
 #stlCanvas:not([hidden]){display:block!important;visibility:visible!important;opacity:1!important;}
+
+.field-required{display:inline-block;margin-left:6px;color:#d4af37;font-size:.72em;font-weight:900;text-transform:uppercase;letter-spacing:.04em}
+
+/* v36: cleaner customer Smart Quote UI and reliable dropdown rendering. */
+.sq-fields{grid-template-columns:repeat(2,minmax(180px,1fr));align-items:end;}
+.sq-fields label{min-width:0;}
+.sq-fields select,
+.sq-fields input[type="number"]{
+  min-height:52px;
+  line-height:1.35;
+  padding:13px 42px 13px 14px;
+  overflow:hidden;
+  text-overflow:ellipsis;
+  white-space:nowrap;
+  appearance:auto;
+  -webkit-appearance:menulist;
+  color-scheme:light;
+}
+:root[data-theme="dark"] .sq-fields select,
+:root[data-theme="dark"] .sq-fields input[type="number"]{color-scheme:dark;}
+.sq-fields select option{background:#ffffff;color:#0e1116;}
+:root[data-theme="dark"] .sq-fields select option{background:#111318;color:#ffffff;}
+.sq-estimate-grid-clean{grid-template-columns:repeat(3,minmax(160px,1fr));}
+.sq-estimate-grid-clean .sq-price{grid-column:auto;}
+.sq-breakdown{display:none!important;}
+@media(max-width:1180px){.sq-fields{grid-template-columns:repeat(3,minmax(160px,1fr));}.sq-estimate-grid-clean{grid-template-columns:repeat(3,minmax(150px,1fr));}.sq-estimate-grid-clean .sq-price{grid-column:auto;}}
+@media(max-width:820px){.sq-fields{grid-template-columns:repeat(2,minmax(150px,1fr));}.sq-estimate-grid-clean{grid-template-columns:repeat(2,minmax(140px,1fr));}}
+@media(max-width:560px){.sq-fields,.sq-estimate-grid-clean{grid-template-columns:1fr;}}

@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css" />
-  <link rel="stylesheet" href="smartquote.css?v=32" />
+  <link rel="stylesheet" href="smartquote.css?v=36" />
   <script type="importmap">
   {
     "imports": {
@@ -41,9 +41,9 @@
   <section class="page-hero smartquote-hero">
     <div class="container">
       <div class="breadcrumb"><a href="index.html">Home</a> / Smart Quote</div>
-      <span class="eyebrow">Stage 2 · Slicer Smart Quote</span>
-      <h1>Upload STL. Preview model. <span class="gold">Calculate with slicer API.</span></h1>
-      <p class="lead">Upload an STL model to preview it in 3D. When the local backend is running, the price comes from real PrusaSlicer output.</p>
+      <span class="eyebrow">Stage 4 · Clean Smart Quote</span>
+      <h1>Upload STL. Preview model. <span class="gold">Get a clean estimate.</span></h1>
+      <p class="lead">Upload an STL model to preview it in 3D. The backend automatically uses tree/organic auto support for every slicer estimate.</p>
       <div class="smartquote-notice" id="apiModeNotice"><b>API status:</b> checking configuration…</div>
     </div>
   </section>
@@ -88,27 +88,41 @@
       <aside class="sq-card sq-settings-card">
         <div class="sq-card-head"><span class="eyebrow">Print Settings</span><h2>Configure Estimate</h2></div>
         <div class="sq-fields">
-          <label>Material Type
-            <select id="sqMaterial">
-              <option value="PLA+" selected>PLA+</option><option value="PLA">PLA</option><option value="PETG">PETG</option><option value="TPU">TPU</option><option value="ABS">ABS</option>
+          <label>Filament Material
+            <select id="sqMaterial" aria-label="Filament material">
+              <option value="PLA+" selected>PLA+</option>
+              <option value="PETG+">PETG+</option>
             </select>
           </label>
           <label>Quality
-            <select id="sqQuality">
-              <option value="draft">Draft · 0.28 mm</option><option value="standard" selected>Standard · 0.20 mm</option><option value="high">High · 0.16 mm</option><option value="ultra">Ultra · 0.12 mm</option>
+            <select id="sqQuality" aria-label="Print quality">
+              <option value="draft">Draft (0.28 mm)</option>
+              <option value="standard" selected>Standard (0.20 mm)</option>
+              <option value="high">High (0.16 mm)</option>
+              <option value="ultra">Ultra (0.12 mm)</option>
             </select>
           </label>
           <label>Color
-            <select id="sqColor"></select>
+            <select id="sqColor" aria-label="Filament color"></select>
+          </label>
+          <label>Wall Loops
+            <select id="sqWalls">
+              <option value="1">1 Wall</option>
+              <option value="2" selected>2 Walls</option>
+              <option value="3">3 Walls</option>
+              <option value="4">4 Walls</option>
+              <option value="5">5 Walls</option>
+              <option value="6">6 Walls</option>
+            </select>
           </label>
           <label>Quantity
             <input id="sqQuantity" type="number" min="1" max="100" value="1" inputmode="numeric" />
           </label>
-          <label class="sq-range-label"><span>Infill <b id="infillValue">20%</b></span>
-            <input id="sqInfill" type="range" min="5" max="100" step="5" value="20" />
+          <label class="sq-range-label"><span>Infill <b id="infillValue">10%</b></span>
+            <input id="sqInfill" type="range" min="5" max="100" step="5" value="10" />
           </label>
         </div>
-        <div class="sq-settings-note">If the local API is connected, this website sends the STL and settings to the backend and waits for real slicer output.</div>
+        <div class="sq-settings-note">Tree/organic auto support is applied automatically in the backend for every slicer estimate.</div>
       </aside>
     </div>
   </section>
@@ -120,11 +134,12 @@
           <div><span class="eyebrow">Smart Quote Result</span><h2 id="estimateStatus">Upload an STL to calculate</h2></div>
           <span class="sq-stage-badge" id="stageBadge">Waiting</span>
         </div>
-        <div class="sq-estimate-grid">
-          <div><span>Estimated Time</span><b id="estTime">—</b></div>
-          <div><span>Estimated Weight</span><b id="estWeight">—</b></div>
-          <div><span>Filament Length</span><b id="estLength">—</b></div>
+        <div class="sq-estimate-grid sq-estimate-grid-clean">
+          <div><span>Estimated Print Time</span><b id="estTime">—</b></div>
+          <div><span>Estimated Filament Weight</span><b id="estWeight">—</b></div>
           <div><span>Layer Height</span><b id="estLayer">0.20 mm</b></div>
+          <div><span>Wall Loops</span><b id="estWalls">2</b></div>
+          <div><span>Material</span><b id="estMaterial">PLA+</b></div>
           <div class="sq-price"><span>Estimated Price</span><b id="estPrice">Rs —</b><small id="estPriceUnit">Connect API for real slicer estimate</small></div>
         </div>
         <div class="sq-breakdown" id="sqBreakdown" hidden></div>
@@ -140,9 +155,9 @@
   <section class="section alt-section">
     <div class="container split">
       <div class="glass-panel">
-        <span class="eyebrow">Stage 2</span>
-        <h2>Real slicer backend ready.</h2>
-        <div class="check-list"><div>3D preview still works in the browser.</div><div>STL and settings are sent to the Quote API.</div><div>Backend runs PrusaSlicer when configured.</div><div>G-code statistics drive price, time, weight and cost.</div></div>
+        <span class="eyebrow">Backend</span>
+        <h2>Real slicer estimate ready.</h2>
+        <div class="check-list"><div>3D preview still works in the browser.</div><div>STL and visible print settings are sent to the Quote API.</div><div>Backend applies tree/organic auto support automatically.</div><div>Customer result stays clean and simple.</div></div>
       </div>
       <div class="glass-panel">
         <span class="eyebrow">Fallback</span>

@@ -14,6 +14,7 @@ const sendToQuoteBtn = $('#sendToQuoteBtn');
 const materialSelect = $('#sqMaterial');
 const qualitySelect = $('#sqQuality');
 const colorSelect = $('#sqColor');
+const wallSelect = $('#sqWalls');
 const infill = $('#sqInfill');
 const quantity = $('#sqQuantity');
 const recalculateBtn = $('#recalculateBtn');
@@ -21,8 +22,9 @@ const API_URL = (window.TRINID_QUOTE_API_URL || '').replace(/\/$/, '');
 let lastEstimate = null;
 
 const MATERIALS = {
-  'PLA+': { density: 1.25, priceKg: 5400, colors: ['Black','White','Gray','Gold','Red','Blue'], best: 'General purpose', description: 'Reliable general-purpose material for prototypes, models, gifts and everyday functional parts.' },
+  'PLA+': { density: 1.25, priceKg: 5400, colors: ['Black','White','Gray','Red','Blue','Green','Yellow','Orange','Gold','Silver','Transparent','Natural'], best: 'General purpose', description: 'Reliable general-purpose material for prototypes, models, gifts and everyday functional parts.' },
   'PLA':  { density: 1.24, priceKg: 5000, colors: ['Black','White','Gray','Red','Blue','Green'], best: 'Models & prototypes', description: 'Easy-printing material for visual models, prototypes and low-load functional parts.' },
+  'PETG+': { density: 1.27, priceKg: 6200, colors: ['Black','White','Gray','Red','Blue','Green','Yellow','Orange','Gold','Silver','Transparent','Natural'], best: 'Durable parts', description: 'Tougher PETG+ material with good layer adhesion for practical and more durable components.' },
   'PETG': { density: 1.27, priceKg: 6200, colors: ['Black','White','Gray','Transparent','Blue'], best: 'Durable parts', description: 'Tougher material with good layer adhesion for practical and more durable components.' },
   'TPU':  { density: 1.21, priceKg: 7500, colors: ['Black','White','Red','Blue'], best: 'Flexible parts', description: 'Flexible material for grips, bumpers, soft-touch parts and components that need bending.' },
   'ABS':  { density: 1.04, priceKg: 5800, colors: ['Black','White','Gray'], best: 'Technical parts', description: 'Technical material for stronger parts where the print setup and model geometry are suitable.' }
@@ -33,7 +35,7 @@ const QUALITY = {
   high:     { layer: 0.16, timeFactor: 1.22, flow: 5.0 },
   ultra:    { layer: 0.12, timeFactor: 1.55, flow: 4.4 }
 };
-const MODEL_COLORS = { Black:0x4a4f59, White:0xe7e9ed, Gray:0x7a808b, Gold:0xd6a11d, Red:0xc63a3a, Blue:0x315dca, Green:0x3f8d55, Transparent:0x9fcbd0 };
+const MODEL_COLORS = { Black:0x4a4f59, White:0xe7e9ed, Gray:0x7a808b, Red:0xc63a3a, Blue:0x315dca, Green:0x3f8d55, Yellow:0xf0d247, Orange:0xe87425, Gold:0xd6a11d, Silver:0xb8bec8, Transparent:0x9fcbd0, Natural:0xe6d2a8 };
 const PRICING = { powerW:150, electricityPerKWh:70, printerCost:140000, printerLifeHours:2000, profitMargin:75, filamentDiameterMm:1.75 };
 const SMARTQUOTE_CONFIG_DOC_PATH = 'trinid/default/public/smartquote';
 let smartQuoteConfigUnsubscribe = null;
@@ -47,6 +49,9 @@ function clamp(v,min,max){ return Math.min(max,Math.max(min,v)); }
 function fmt(n,d=2){ return Number(n||0).toLocaleString(undefined,{minimumFractionDigits:d,maximumFractionDigits:d}); }
 function fmtBytes(bytes){ if(bytes < 1024) return `${bytes} B`; if(bytes < 1024**2) return `${fmt(bytes/1024,1)} KB`; return `${fmt(bytes/1024**2,1)} MB`; }
 function fmtTime(minutes){ const total=Math.max(0,Math.round(minutes)); const d=Math.floor(total/1440); const h=Math.floor((total%1440)/60); const m=total%60; return [d?`${d}d`:null,h?`${h}h`:null,(m||(!d&&!h))?`${m}m`:null].filter(Boolean).join(' '); }
+function supportLabel(value){ return 'Tree / Organic Auto'; }
+function selectedWalls(){ return clamp(parseInt(wallSelect?.value || '2',10) || 2,1,6); }
+function selectedSupport(){ return 'tree-auto'; }
 function apiMode(){
   const notice = $('#apiModeNotice');
   if(!notice) return;
@@ -313,20 +318,23 @@ function browserEstimate(){
   const q=QUALITY[qualitySelect.value];
   const mat=MATERIALS[materialSelect.value];
   const infillRatio=Number(infill.value)/100;
+  const wallLoops=selectedWalls();
+  const supportMode=selectedSupport();
+  const supportFactor=supportMode==='normal-auto'?1.25:(supportMode==='buildplate-tree'?1.14:1.18);
   const qty=clamp(parseInt(quantity.value||'1',10)||1,1,100);
   quantity.value=qty;
   const solid=modelData.volumeMm3;
   const surface=modelData.surfaceAreaMm2;
-  const shellThickness=0.55*Math.pow(0.20/q.layer,0.08);
+  const shellThickness=(0.45*wallLoops)*Math.pow(0.20/q.layer,0.08);
   const shellVolume=Math.min(solid*0.72,surface*shellThickness);
   const inner=Math.max(0,solid-shellVolume);
-  const extrusionVolume=(shellVolume+inner*infillRatio)*1.08;
+  const extrusionVolume=(shellVolume+inner*infillRatio)*1.08*supportFactor;
   const weightG=extrusionVolume/1000*mat.density;
   const filamentArea=Math.PI*Math.pow(PRICING.filamentDiameterMm/2,2);
   const lengthM=extrusionVolume/filamentArea/1000;
   const complexity=clamp(1+(surface/Math.max(solid,1))*0.9,1,1.45);
   const layers=Math.max(1,modelData.size.z/q.layer);
-  const timeSeconds=(extrusionVolume/q.flow)*q.timeFactor*complexity*1.16 + layers*2.5;
+  const timeSeconds=(extrusionVolume/q.flow)*q.timeFactor*complexity*1.16*supportFactor + layers*2.5;
   const timeMinutes=timeSeconds/60;
   const hours=timeMinutes/60;
   const filamentCost=weightG/1000*mat.priceKg;
@@ -338,7 +346,7 @@ function browserEstimate(){
   return {
     source:'browser-fallback', slicerEngine:'', fileName:currentFile.name,
     material:materialSelect.value, color:colorSelect.value, quality:qualitySelect.options[qualitySelect.selectedIndex].text, qualityKey:qualitySelect.value,
-    layerHeightMm:q.layer, infill:Number(infill.value), quantity:qty,
+    layerHeightMm:q.layer, wallLoops, support:supportMode, supportLabel:supportLabel(supportMode), infill:Number(infill.value), quantity:qty,
     dimensions:{x:modelData.size.x,y:modelData.size.y,z:modelData.size.z}, triangles:modelData.triangles, solidVolumeCm3:solid/1000,
     printTimeMinutes:timeMinutes*qty, unitPrintTimeMinutes:timeMinutes, weightG:weightG*qty, unitWeightG:weightG, filamentLengthM:lengthM*qty, unitFilamentLengthM:lengthM,
     unitPrice,totalPrice, profitMargin:PRICING.profitMargin, createdAt:new Date().toISOString(), stage:'browser-preliminary',
@@ -353,6 +361,7 @@ async function apiEstimate(){
   fd.append('color', colorSelect.value);
   fd.append('quality', qualitySelect.value);
   fd.append('infill', infill.value);
+  fd.append('walls', String(selectedWalls()));
   fd.append('quantity', quantity.value || '1');
   fd.append('profit_margin', String(PRICING.profitMargin));
   const res=await fetch(`${API_URL}/api/quote`, { method:'POST', body:fd });
@@ -363,7 +372,7 @@ async function apiEstimate(){
   return {
     source:json.source || 'real-slicer', slicerEngine:json.slicerEngine || '', fileName:currentFile.name,
     material:settings.material || materialSelect.value, color:settings.color || colorSelect.value, quality:qualitySelect.options[qualitySelect.selectedIndex].text, qualityKey:qualitySelect.value,
-    layerHeightMm:settings.layerHeightMm || QUALITY[qualitySelect.value].layer, infill:Number(settings.infill || infill.value), quantity:Number(settings.quantity || quantity.value || 1),
+    layerHeightMm:settings.layerHeightMm || QUALITY[qualitySelect.value].layer, wallLoops:Number(settings.walls || settings.wallLoops || selectedWalls()), support:settings.support || selectedSupport(), supportLabel:supportLabel(settings.support || selectedSupport()), infill:Number(settings.infill || infill.value), quantity:Number(settings.quantity || quantity.value || 1),
     dimensions:{x:m.dimensionsMm?.x || modelData.size.x, y:m.dimensionsMm?.y || modelData.size.y, z:m.dimensionsMm?.z || modelData.size.z},
     triangles:m.triangles || modelData.triangles, solidVolumeCm3:m.solidVolumeCm3 || modelData.volumeMm3/1000,
     printTimeMinutes:total.printTimeMinutes || 0, unitPrintTimeMinutes:unit.printTimeMinutes || 0,
@@ -387,14 +396,12 @@ function renderEstimate(estimate){
   $('#estimateStatus').textContent=`${estimate.fileName} · ${estimate.quantity} item${estimate.quantity===1?'':'s'}`;
   $('#estTime').textContent=fmtTime(estimate.printTimeMinutes);
   $('#estWeight').textContent=`${fmt(estimate.weightG,2)} g`;
-  $('#estLength').textContent=`${fmt(estimate.filamentLengthM,2)} m`;
+  if($('#estWalls')) $('#estWalls').textContent=String(estimate.wallLoops || selectedWalls());
+  if($('#estMaterial')) $('#estMaterial').textContent=estimate.material || materialSelect.value;
   $('#estPrice').textContent=`Rs ${ceilRs(estimate.totalPrice).toLocaleString()}`;
   $('#estPriceUnit').textContent=estimate.quantity>1?`Rs ${ceilRs(estimate.unitPrice).toLocaleString()} each · ${isReal?'real slicer estimate':'browser fallback estimate'}`:(isReal?'Real slicer estimate':'Browser fallback estimate');
   const bd=$('#sqBreakdown');
-  if(bd && estimate.costBreakdown && typeof estimate.costBreakdown.totalCost !== 'undefined'){
-    bd.hidden=false;
-    bd.innerHTML=`<table><tr><th>Cost part</th><th>Unit value</th></tr><tr><td>Filament</td><td>Rs ${ceilRs(estimate.costBreakdown.filament).toLocaleString()}</td></tr><tr><td>Electricity</td><td>Rs ${ceilRs(estimate.costBreakdown.electricity).toLocaleString()}</td></tr><tr><td>Machine</td><td>Rs ${ceilRs(estimate.costBreakdown.machine).toLocaleString()}</td></tr><tr><td>Risk</td><td>Rs ${ceilRs(estimate.costBreakdown.risk || 0).toLocaleString()}</td></tr><tr><td>Total Cost</td><td>Rs ${ceilRs(estimate.costBreakdown.totalCost).toLocaleString()}</td></tr><tr><td>Profit</td><td>Rs ${ceilRs(estimate.costBreakdown.profit).toLocaleString()}</td></tr></table>`;
-  }else if(bd){ bd.hidden=true; }
+  if(bd){ bd.hidden=true; bd.innerHTML=''; }
   const note = $('.sq-settings-note') || $('#settingsNote');
   if(note){
     note.textContent = estimate.apiError ? `API failed, browser fallback shown: ${estimate.apiError}` : (isReal ? 'Real slicer API result is being shown.' : 'Browser fallback is shown until the API is connected or slicer succeeds.');
@@ -405,6 +412,8 @@ async function calculateEstimate(){
   const q=QUALITY[qualitySelect.value];
   $('#infillValue').textContent=`${infill.value}%`;
   $('#estLayer').textContent=`${q.layer.toFixed(2)} mm`;
+  if($('#estWalls')) $('#estWalls').textContent=String(selectedWalls());
+  if($('#estMaterial')) $('#estMaterial').textContent=materialSelect.value;
   updateMaterialCard();
   if(!modelData){ return; }
   let estimate;
@@ -427,7 +436,7 @@ async function calculateEstimate(){
 
 function updateMaterialCard(){
   const mat=MATERIALS[materialSelect.value];
-  $('#materialTitle').textContent=materialSelect.value; $('#materialDescription').textContent=mat.description; $('#materialDensity').textContent=`${mat.density.toFixed(2)} g/cm³`; $('#materialPrice').textContent=`Rs ${mat.priceKg.toLocaleString()}/kg`; $('#materialBestFor').textContent=mat.best;
+  $('#materialTitle').textContent=materialSelect.value; if($('#estMaterial')) $('#estMaterial').textContent=materialSelect.value; $('#materialDescription').textContent=mat.description; $('#materialDensity').textContent=`${mat.density.toFixed(2)} g/cm³`; $('#materialPrice').textContent=`Rs ${mat.priceKg.toLocaleString()}/kg`; $('#materialBestFor').textContent=mat.best;
   const current=colorSelect.value; colorSelect.innerHTML=mat.colors.map(c=>`<option value="${c}">${c}</option>`).join(''); if(mat.colors.includes(current)) colorSelect.value=current; else colorSelect.value=mat.colors[0];
   const orb=$('#materialOrb'); const c=MODEL_COLORS[colorSelect.value]||0x202329; orb.style.setProperty('--orb-color',`#${c.toString(16).padStart(6,'0')}`);
 }
@@ -444,7 +453,7 @@ if(recalculateBtn) recalculateBtn.addEventListener('click',calculateEstimate);
 uploadAnotherBtn.addEventListener('click',()=>fileInput.click());
 materialSelect.addEventListener('change',()=>{updateMaterialCard();syncOrbColor();calculateEstimate();applyModelColor();});
 colorSelect.addEventListener('change',()=>{syncOrbColor();applyModelColor();calculateEstimate();});
-qualitySelect.addEventListener('change',calculateEstimate); infill.addEventListener('input',calculateEstimate); quantity.addEventListener('input',calculateEstimate);
+qualitySelect.addEventListener('change',calculateEstimate); if(wallSelect) wallSelect.addEventListener('change',calculateEstimate); infill.addEventListener('input',calculateEstimate); quantity.addEventListener('input',calculateEstimate);
 sendToQuoteBtn.addEventListener('click',()=>{
   if(!modelData?.estimate) return;
   localStorage.setItem('trinid-smartquote-draft',JSON.stringify(modelData.estimate));

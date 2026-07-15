@@ -42,6 +42,8 @@ const round2 = value => Math.round(num(value) * 100) / 100;
 const CONFIG_KEYS = ['P', 'rho', 'd_mm', 'W', 'R', 'Cp', 'H', 'F', 'Cups', 'Hups'];
 const LINE_MATERIAL_OPTIONS = [{ value: '', label: 'None' }, 'PLA+', 'PETG+'];
 const LINE_COLOR_OPTIONS = [{ value: '', label: 'None' }, 'Black', 'White', 'Gray', 'Red', 'Blue', 'Green', 'Yellow', 'Orange', 'Gold', 'Silver', 'Transparent', 'Natural'];
+const LINE_SUPPORT_OPTIONS = [{ value: 'tree-auto', label: 'Tree / Organic Auto' }, { value: 'normal-auto', label: 'Normal Auto' }, { value: 'buildplate-tree', label: 'Tree Build Plate Only' }];
+const supportText = value => ({ 'tree-auto': 'Tree / Organic Auto', 'normal-auto': 'Normal Auto', 'buildplate-tree': 'Tree Build Plate Only' }[String(value || '').trim()] || String(value || 'Tree / Organic Auto').trim());
 
 // Material profile library for FDM/FFF filament pricing.
 // Densities and starter prices are editable defaults, not supplier quotes.
@@ -784,6 +786,7 @@ function addCalculatorResultToLine(type) {
       unit: result.price,
       weight: `${result.weightG.toFixed(2)} g`,
       printTime: minutesLabel(result.printTimeMinutes),
+      support: result.support || 'tree-auto',
       calcKey,
       totalCost: result.totalCost,
       electricityCost: result.electricityCost,
@@ -794,7 +797,7 @@ function addCalculatorResultToLine(type) {
     saveQuoteDraft();
   }
   if (type === 'bill') {
-    addBillRow({ model: result.model, materialType: hasOwn(result, 'materialType') ? result.materialType : 'PLA+', color: hasOwn(result, 'color') ? result.color : 'Black', qty: 1, unit: result.price, discount: 0, cost: result.totalCost, weight: `${result.weightG.toFixed(2)} g`, printTime: minutesLabel(result.printTimeMinutes) });
+    addBillRow({ model: result.model, materialType: hasOwn(result, 'materialType') ? result.materialType : 'PLA+', color: hasOwn(result, 'color') ? result.color : 'Black', qty: 1, unit: result.price, discount: 0, cost: result.totalCost, weight: `${result.weightG.toFixed(2)} g`, printTime: minutesLabel(result.printTimeMinutes), support: result.support || 'tree-auto' });
     saveBillDraft();
   }
   toast(`Calculator result added to ${type === 'bill' ? 'Bill' : 'Quotation'}`);
@@ -862,6 +865,7 @@ function addServiceLine(items, kind) {
     cost: 0,
     layer: '',
     walls: '',
+    support: '',
     infill: '',
     weight: '',
     printTime: '',
@@ -893,6 +897,7 @@ function addBillRow(data = {}) {
     <td>${lineInput(data.cost || 0, 'cost-input', 'number')}</td>
     <td>${lineInput(data.layer || '0.2', 'layer-input')}</td>
     <td><select class="walls-input"><option></option>${['1','2','3','4','5','6','Custom'].map(v => `<option${data.walls == v ? ' selected' : ''}>${v}</option>`).join('')}</select></td>
+    <td>${lineSelect(data.support || 'tree-auto', 'support-input', LINE_SUPPORT_OPTIONS, 'tree-auto')}</td>
     <td>${lineInput(data.infill || '', 'infill-input')}</td>
     <td>${lineInput(data.weight || '', 'weight-input')}</td>
     <td>${lineInput(data.printTime || '', 'time-input')}</td>
@@ -917,6 +922,7 @@ function addQuoteRow(data = {}) {
     <td>${lineInput(data.unitPrice ?? data.unit ?? '', 'unit-input', 'number')}</td>
     <td>${lineInput(data.layer || '0.2', 'layer-input')}</td>
     <td><select class="walls-input">${['1','2','3','4','5','6','Custom'].map(v => `<option${data.walls == v ? ' selected' : ''}>${v}</option>`).join('')}</select></td>
+    <td>${lineSelect(data.support || 'tree-auto', 'support-input', LINE_SUPPORT_OPTIONS, 'tree-auto')}</td>
     <td>${lineInput(data.infill || '', 'infill-input')}</td>
     <td>${lineInput(data.weight || '', 'weight-input')}</td>
     <td>${lineInput(data.printTime || '', 'time-input')}</td>
@@ -936,6 +942,7 @@ function collectBillItems() {
     cost: ceilCurrency($('.cost-input', tr).value),
     layer: $('.layer-input', tr).value.trim(),
     walls: $('.walls-input', tr).value.trim(),
+    support: $('.support-input', tr) ? $('.support-input', tr).value.trim() : 'tree-auto',
     infill: $('.infill-input', tr).value.trim(),
     weight: $('.weight-input', tr) ? $('.weight-input', tr).value.trim() : '',
     printTime: $('.time-input', tr) ? $('.time-input', tr).value.trim() : '',
@@ -952,6 +959,7 @@ function collectQuoteItems() {
     unitPrice: ceilCurrency($('.unit-input', tr).value),
     layer: $('.layer-input', tr).value.trim(),
     walls: $('.walls-input', tr).value.trim(),
+    support: $('.support-input', tr) ? $('.support-input', tr).value.trim() : 'tree-auto',
     infill: $('.infill-input', tr).value.trim(),
     weight: $('.weight-input', tr).value.trim(),
     printTime: $('.time-input', tr).value.trim(),
@@ -1359,6 +1367,7 @@ function printInternalQuotationDocument(data) {
       <td>${formatMoneyDot(item.unitPrice)}</td>
       <td>${layer}</td>
       <td>${safe(item.walls || '')}</td>
+      <td>${safe(supportText(item.support || 'tree-auto'))}</td>
       <td>${infill}</td>
       <td>${formatMoneyDot(lineTotal)}</td>
     </tr>`;
@@ -1378,7 +1387,7 @@ function printInternalQuotationDocument(data) {
     </tr>`).join('');
 
   const html = `<!doctype html><html><head><base href="${location.href}"><title>${safe(customerFileTitle('Internal_Quote', data.no, data.customer, data.useCustomerFileName))}</title><style>
-    @page{size:A4;margin:10mm}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}.print-btn{position:fixed;right:12px;top:12px;z-index:10;border:0;border-radius:999px;background:#d4af37;color:#111;font-weight:900;padding:10px 16px;cursor:pointer}@media print{.print-btn{display:none}}.head{border-bottom:3px solid #d4af37;background:#111;color:#fff;padding:14px 16px;margin-bottom:12px}.brand{display:flex;align-items:center;gap:12px}.brand img{width:50px;height:50px;object-fit:contain}.title{margin-left:auto;text-align:right}.title h1{margin:0;color:#d4af37;font-size:22px}.title p{margin:4px 0 0;font-size:12px}.warning{background:#fff3cd;border:1px solid #d4af37;padding:8px 11px;font-weight:700;margin:8px 0 12px}.meta{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px}.meta div{background:#f2f2f2;padding:8px 10px;border-radius:6px}.meta b{display:block;font-size:10px;color:#555;text-transform:uppercase}.meta span{font-size:13px;font-weight:700}.section-title{font-size:13px;font-weight:900;color:#111;border-left:5px solid #d4af37;padding-left:8px;margin:14px 0 8px}table{width:100%;border-collapse:collapse;font-size:9.3px;page-break-inside:auto}th{background:#111;color:#d4af37;text-align:left;padding:6px 5px;border:1px solid #333}td{padding:5px;border:1px solid #ccc;vertical-align:top}tr:nth-child(even) td{background:#f7f7f7}.text-right{text-align:right}.summary{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px;page-break-inside:avoid}.summary div{display:flex;justify-content:space-between;background:#f2f2f2;padding:8px 10px;border-radius:4px;font-size:11px}.summary .final{background:#d4af37;font-weight:900}.notes{margin-top:12px;font-size:10.5px;color:#333}.footer-note{margin-top:10px;font-size:10px;color:#777;font-weight:700}.page-break{page-break-inside:avoid}</style></head><body><button class="print-btn" onclick="window.print()">Print / Save Internal PDF</button><section class="head"><div class="brand"><img src="../assets/logo.png" alt="Trini-D"><div><strong>TRINI-D 3D Printing</strong><br><small>Internal quotation copy</small></div><div class="title"><h1>INTERNAL QUOTATION</h1><p># ${safe(data.no)}</p></div></div></section><div class="warning">INTERNAL COPY ONLY — Do not send this PDF to the customer.</div><section class="meta"><div><b>Customer</b><span>${safe(data.customer || 'Customer')}</span></div><div><b>Date</b><span>${safe(prettyDate(data.date))}</span></div><div><b>Quote No</b><span>${safe(data.no)}</span></div></section><div class="section-title">Customer Quotation Details</div><table><thead><tr><th>#</th><th>Model / Description</th><th>Qty</th><th>Unit Price</th><th>Layer</th><th>Walls</th><th>Infill</th><th>Total</th></tr></thead><tbody>${customerRows}</tbody></table><div class="section-title">Internal Cost & Profit Details</div><table><thead><tr><th>#</th><th>Model</th><th>Part Time</th><th>Part Weight</th><th>Electricity Cost</th><th>Filament Cost</th><th>Machine Cost</th><th>Total Cost</th><th>Profit</th><th>Profit Margin</th></tr></thead><tbody>${internalRows}</tbody></table><section class="summary page-break"><div><span>Total Weight</span><b>${formatNumber(totals.weightG)} g</b></div><div><span>Total Time</span><b>${minutesLabel(totals.printMinutes)}</b></div><div><span>Total Electricity Cost</span><b>${formatMoneyDot(totals.electricity)}</b></div><div><span>Total Filament Cost</span><b>${formatMoneyDot(totals.filament)}</b></div><div><span>Total Machine Cost</span><b>${formatMoneyDot(totals.machine)}</b></div><div><span>Total Cost</span><b>${formatMoneyDot(totals.cost)}</b></div><div><span>Customer Quotation Total</span><b>${formatMoneyDot(totals.price)}</b></div><div class="final"><span>Total Profit</span><b>${formatMoneyDot(totals.profit)}</b></div></section>${data.notes ? `<section class="notes"><b>Notes:</b><br>${safe(data.notes).split('\n').join('<br>')}</section>` : ''}<div class="footer-note">This internal PDF includes cost, time, weight, and profit details for business use only.</div><script>window.onload = () => setTimeout(() => window.print(), 500);</script></body></html>`;
+    @page{size:A4;margin:10mm}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}.print-btn{position:fixed;right:12px;top:12px;z-index:10;border:0;border-radius:999px;background:#d4af37;color:#111;font-weight:900;padding:10px 16px;cursor:pointer}@media print{.print-btn{display:none}}.head{border-bottom:3px solid #d4af37;background:#111;color:#fff;padding:14px 16px;margin-bottom:12px}.brand{display:flex;align-items:center;gap:12px}.brand img{width:50px;height:50px;object-fit:contain}.title{margin-left:auto;text-align:right}.title h1{margin:0;color:#d4af37;font-size:22px}.title p{margin:4px 0 0;font-size:12px}.warning{background:#fff3cd;border:1px solid #d4af37;padding:8px 11px;font-weight:700;margin:8px 0 12px}.meta{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px}.meta div{background:#f2f2f2;padding:8px 10px;border-radius:6px}.meta b{display:block;font-size:10px;color:#555;text-transform:uppercase}.meta span{font-size:13px;font-weight:700}.section-title{font-size:13px;font-weight:900;color:#111;border-left:5px solid #d4af37;padding-left:8px;margin:14px 0 8px}table{width:100%;border-collapse:collapse;font-size:9.3px;page-break-inside:auto}th{background:#111;color:#d4af37;text-align:left;padding:6px 5px;border:1px solid #333}td{padding:5px;border:1px solid #ccc;vertical-align:top}tr:nth-child(even) td{background:#f7f7f7}.text-right{text-align:right}.summary{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px;page-break-inside:avoid}.summary div{display:flex;justify-content:space-between;background:#f2f2f2;padding:8px 10px;border-radius:4px;font-size:11px}.summary .final{background:#d4af37;font-weight:900}.notes{margin-top:12px;font-size:10.5px;color:#333}.footer-note{margin-top:10px;font-size:10px;color:#777;font-weight:700}.page-break{page-break-inside:avoid}</style></head><body><button class="print-btn" onclick="window.print()">Print / Save Internal PDF</button><section class="head"><div class="brand"><img src="../assets/logo.png" alt="Trini-D"><div><strong>TRINI-D 3D Printing</strong><br><small>Internal quotation copy</small></div><div class="title"><h1>INTERNAL QUOTATION</h1><p># ${safe(data.no)}</p></div></div></section><div class="warning">INTERNAL COPY ONLY — Do not send this PDF to the customer.</div><section class="meta"><div><b>Customer</b><span>${safe(data.customer || 'Customer')}</span></div><div><b>Date</b><span>${safe(prettyDate(data.date))}</span></div><div><b>Quote No</b><span>${safe(data.no)}</span></div></section><div class="section-title">Customer Quotation Details</div><table><thead><tr><th>#</th><th>Model / Description</th><th>Qty</th><th>Unit Price</th><th>Layer</th><th>Walls</th><th>Support</th><th>Infill</th><th>Total</th></tr></thead><tbody>${customerRows}</tbody></table><div class="section-title">Internal Cost & Profit Details</div><table><thead><tr><th>#</th><th>Model</th><th>Part Time</th><th>Part Weight</th><th>Electricity Cost</th><th>Filament Cost</th><th>Machine Cost</th><th>Total Cost</th><th>Profit</th><th>Profit Margin</th></tr></thead><tbody>${internalRows}</tbody></table><section class="summary page-break"><div><span>Total Weight</span><b>${formatNumber(totals.weightG)} g</b></div><div><span>Total Time</span><b>${minutesLabel(totals.printMinutes)}</b></div><div><span>Total Electricity Cost</span><b>${formatMoneyDot(totals.electricity)}</b></div><div><span>Total Filament Cost</span><b>${formatMoneyDot(totals.filament)}</b></div><div><span>Total Machine Cost</span><b>${formatMoneyDot(totals.machine)}</b></div><div><span>Total Cost</span><b>${formatMoneyDot(totals.cost)}</b></div><div><span>Customer Quotation Total</span><b>${formatMoneyDot(totals.price)}</b></div><div class="final"><span>Total Profit</span><b>${formatMoneyDot(totals.profit)}</b></div></section>${data.notes ? `<section class="notes"><b>Notes:</b><br>${safe(data.notes).split('\n').join('<br>')}</section>` : ''}<div class="footer-note">This internal PDF includes cost, time, weight, and profit details for business use only.</div><script>window.onload = () => setTimeout(() => window.print(), 500);</script></body></html>`;
   const win = window.open('', '_blank');
   win.document.write(html);
   win.document.close();
@@ -1408,6 +1417,7 @@ function printDocument(data) {
     color: safe(colorText(item)),
     layer: normalizedLayer(item),
     walls: safe(item.walls || ''),
+    support: safe(supportText(item.support || 'tree-auto')),
     infill: normalizedInfill(item),
     weight: item.weight || '',
     printTime: item.printTime || item.print_time || ''
@@ -1430,7 +1440,7 @@ function printDocument(data) {
       return {
         height: 22 + extra,
         html: top => {
-          const subParts = []; if (matColor) subParts.push(`Material: ${safe(matColor)}`); if (weight) subParts.push(`⚖ ${safe(weight)}`); if (printTime) subParts.push(`⏱ ${safe(printTime)}`);
+          const subParts = []; if (matColor) subParts.push(`Material: ${safe(matColor)}`); if (item.support) subParts.push(`Support: ${safe(item.support)}`); if (weight) subParts.push(`⚖ ${safe(weight)}`); if (printTime) subParts.push(`⏱ ${safe(printTime)}`);
           const sub = subParts.length ? `<div class="quote-sub" style="top:22pt">${subParts.join('   |   ')}</div>` : '';
           return `<div class="doc-row quote-row ${rowClass}" style="top:${top}pt;height:${22 + extra}pt"><div class="td q-model">${safe(item.model).slice(0, 30)}</div><div class="td q-qty">${item.qty}</div><div class="td q-unit">${formatMoneyDot(item.unitPrice)}</div><div class="td q-layer">${item.layer}</div><div class="td q-walls">${item.walls}</div><div class="td q-infill">${item.infill}</div><div class="td q-total">${formatMoneyDot(lineTotal)}</div>${sub}</div>`;
         }
@@ -1442,6 +1452,7 @@ function printDocument(data) {
     if (item.materialType || item.color) specParts.push(`Material: ${[item.materialType, item.color].filter(Boolean).join(' / ')}`);
     if (item.layer) specParts.push(`Layer: ${item.layer}`);
     if (item.walls) specParts.push(`Walls: ${item.walls}`);
+    if (item.support) specParts.push(`Support: ${item.support}`);
     if (item.infill) specParts.push(`Infill: ${item.infill}`);
     if (showCustomerSpecs && item.weight) specParts.push(`Weight: ${item.weight}`);
     if (showCustomerSpecs && item.printTime) specParts.push(`Time: ${item.printTime}`);
@@ -1701,6 +1712,7 @@ function itemToBillData(item) {
     cost: ceilCurrency(item.totalCost),
     layer: item.layer || item.layerHeight || '',
     walls: item.walls || item.wallLoops || '',
+    support: item.support || 'tree-auto',
     infill: item.infill || ''
   };
 }

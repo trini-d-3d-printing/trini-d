@@ -15,3 +15,6 @@ Admin Panel Update:
 - Open admin/index.html locally for testing.
 - Use README_ADMIN_SETUP.txt before publishing.
 - Default admin PIN is 1234. Change it in admin/admin.js.
+
+
+V34: Smart Quote default infill is 10% for Ender-3 V3 Plus backend profile matching.

@@ -182,7 +182,7 @@ slideshows.forEach(slideshow => {
     const notes = form.querySelector('#notes');
     const fileLabel = form.querySelector('#fileLabel');
     if (material) {
-      const map = {'PLA+':'PLA / PLA+','PLA':'PLA / PLA+','PETG':'PETG','TPU':'TPU','ABS':'ABS'};
+      const map = {'PLA+':'PLA / PLA+','PLA':'PLA / PLA+','PETG+':'PETG','PETG':'PETG','TPU':'TPU','ABS':'ABS'};
       material.value = map[d.material] || material.value;
     }
     if (qty) qty.value = d.quantity || 1;
@@ -198,6 +198,8 @@ slideshows.forEach(slideshow => {
         `Material / Color: ${d.material || ''}${d.color ? ' / ' + d.color : ''}`,
         `Quality: ${d.quality || ''}`,
         `Infill: ${d.infill || 0}%`,
+        `Wall loops: ${d.wallLoops || d.walls || 2}`,
+        `Support: ${d.supportLabel || d.support || 'Tree Auto'}`,
         `Quantity: ${d.quantity || 1}`,
         `Dimensions: ${(Number(dims.x)||0).toFixed(1)} × ${(Number(dims.y)||0).toFixed(1)} × ${(Number(dims.z)||0).toFixed(1)} mm`,
         `Estimated time: ${h}h ${m}m`,
