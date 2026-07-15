@@ -71,3 +71,170 @@
 .td-select.open .td-select-menu{display:grid;gap:4px;}
 .td-select-option{border:0;background:transparent;color:inherit;text-align:left;padding:11px 12px;border-radius:10px;font:inherit;font-weight:750;cursor:pointer;}
 .td-select-option:hover,.td-select-option.selected{background:rgba(214,161,29,.16);color:var(--gold);}
+
+/* v41: responsive three-column Smart Quote workspace.
+   Results stay beside the model on wide screens, while settings never overflow. */
+.smartquote-section{padding-top:28px;padding-bottom:46px;}
+.smartquote-layout{
+  display:grid;
+  grid-template-columns:minmax(0,1.55fr) minmax(285px,.78fr) minmax(285px,.82fr);
+  grid-template-areas:"preview settings result";
+  gap:18px;
+  align-items:start;
+}
+.sq-preview-column{grid-area:preview;display:grid;gap:18px;min-width:0;}
+.sq-settings-card{grid-area:settings;min-width:0;overflow:visible;}
+.sq-estimate-panel-side{grid-area:result;min-width:0;align-self:start;}
+
+/* Keep headings proportional inside narrow dashboard cards. */
+.sq-settings-card .sq-card-head h2,
+.sq-estimate-panel-side .sq-estimate-header h2{
+  font-size:clamp(1.55rem,2.1vw,2.35rem);
+  line-height:1.04;
+  letter-spacing:-.045em;
+  overflow-wrap:anywhere;
+}
+.sq-settings-card .sq-card-head h2{margin-bottom:20px;}
+
+/* Controls use the full settings-card width and can never push outside it. */
+.sq-settings-card .sq-fields{
+  display:grid;
+  grid-template-columns:minmax(0,1fr);
+  gap:14px;
+  width:100%;
+  min-width:0;
+}
+.sq-settings-card .sq-fields label,
+.sq-settings-card .td-select,
+.sq-settings-card .td-select-button,
+.sq-settings-card input,
+.sq-settings-card select{
+  min-width:0;
+  max-width:100%;
+}
+.sq-settings-card .td-select-button,
+.sq-settings-card .sq-fields input[type="number"]{
+  width:100%;
+  min-height:50px;
+  padding:12px 40px 12px 13px;
+}
+.sq-settings-card .sq-range-label{padding-top:2px;}
+.sq-settings-card .sq-range-label input[type="range"]{display:block;width:100%;max-width:100%;margin:6px 0 0;}
+.sq-settings-card .sq-settings-note{margin-top:18px;}
+.sq-settings-card .td-select-menu{left:0;right:0;width:auto;max-width:100%;z-index:120;}
+
+/* Compact estimate sidebar: all six requested outputs are visible beside the preview. */
+.sq-estimate-panel-side{padding:20px;overflow:visible;}
+.sq-estimate-panel-side .sq-estimate-header{display:grid;gap:12px;}
+.sq-estimate-panel-side .sq-stage-badge{justify-self:start;}
+.sq-estimate-panel-side .sq-estimate-grid-clean{
+  display:grid;
+  grid-template-columns:repeat(2,minmax(0,1fr));
+  gap:10px;
+  margin-top:18px;
+}
+.sq-estimate-panel-side .sq-estimate-grid-clean>div{
+  min-width:0;
+  padding:14px 12px;
+  border-radius:15px;
+}
+.sq-estimate-panel-side .sq-estimate-grid-clean span{
+  font-size:.66rem;
+  line-height:1.35;
+}
+.sq-estimate-panel-side .sq-estimate-grid-clean b{
+  font-size:1.02rem;
+  line-height:1.2;
+  overflow-wrap:anywhere;
+}
+.sq-estimate-panel-side .sq-estimate-grid-clean .sq-price{
+  grid-column:1/-1;
+}
+.sq-estimate-panel-side .sq-estimate-grid-clean .sq-price b{font-size:1.55rem;}
+.sq-estimate-panel-side .sq-estimate-grid-clean small{font-size:.74rem;line-height:1.4;}
+.sq-estimate-panel-side .sq-estimate-actions{
+  display:grid;
+  grid-template-columns:1fr;
+  gap:10px;
+  margin-top:18px;
+}
+.sq-estimate-panel-side .sq-estimate-actions .btn{width:100%;padding:12px 14px;white-space:normal;text-align:center;}
+
+/* Viewer is the dominant center panel. */
+.sq-viewer-card{min-height:610px;}
+.sq-viewer{min-height:445px;}
+.sq-viewer-toolbar b{max-width:min(360px,58vw);}
+
+/* Material information becomes a compact strip below the preview instead of using a full column. */
+.sq-material-card-compact{
+  display:grid;
+  grid-template-columns:112px minmax(0,1fr);
+  grid-template-areas:"orb copy" "specs specs";
+  gap:16px 18px;
+  align-items:center;
+  padding:18px;
+}
+.sq-material-card-compact .material-orb{
+  grid-area:orb;
+  width:112px;
+  height:112px;
+  margin:0;
+  border-radius:20px;
+}
+.sq-material-card-compact .material-orb span{width:66px;height:66px;font-size:1.25rem;}
+.sq-material-card-compact .sq-material-copy{grid-area:copy;min-width:0;}
+.sq-material-card-compact .sq-card-head h2{font-size:clamp(1.8rem,3vw,2.65rem);margin:4px 0 8px;}
+.sq-material-card-compact .sq-material-copy p{margin:0;font-size:.88rem;line-height:1.55;}
+.sq-material-card-compact .sq-spec-list{
+  grid-area:specs;
+  display:grid;
+  grid-template-columns:repeat(3,minmax(0,1fr));
+  margin-top:0;
+  border-top:1px solid var(--line);
+}
+.sq-material-card-compact .sq-spec-list div{
+  display:grid;
+  gap:5px;
+  padding:12px;
+  border-bottom:0;
+  border-right:1px solid var(--line);
+}
+.sq-material-card-compact .sq-spec-list div:last-child{border-right:0;}
+.sq-material-card-compact .sq-spec-list b{text-align:left;overflow-wrap:anywhere;}
+
+/* Two-column tablet layout. */
+@media(max-width:1160px){
+  .smartquote-layout{
+    grid-template-columns:minmax(0,1.55fr) minmax(300px,.85fr);
+    grid-template-areas:"preview settings" "result result";
+  }
+  .sq-estimate-panel-side .sq-estimate-header{display:flex;}
+  .sq-estimate-panel-side .sq-stage-badge{justify-self:auto;}
+  .sq-estimate-panel-side .sq-estimate-grid-clean{grid-template-columns:repeat(3,minmax(0,1fr));}
+  .sq-estimate-panel-side .sq-estimate-grid-clean .sq-price{grid-column:auto;}
+  .sq-estimate-panel-side .sq-estimate-actions{grid-template-columns:repeat(3,minmax(0,1fr));}
+}
+
+/* Stacked mobile/tablet layout. */
+@media(max-width:820px){
+  .smartquote-layout{
+    grid-template-columns:minmax(0,1fr);
+    grid-template-areas:"preview" "settings" "result";
+  }
+  .sq-settings-card .sq-fields{grid-template-columns:repeat(2,minmax(0,1fr));}
+  .sq-estimate-panel-side .sq-estimate-grid-clean{grid-template-columns:repeat(2,minmax(0,1fr));}
+  .sq-estimate-panel-side .sq-estimate-grid-clean .sq-price{grid-column:1/-1;}
+  .sq-estimate-panel-side .sq-estimate-actions{grid-template-columns:1fr;}
+}
+
+@media(max-width:560px){
+  .sq-settings-card .sq-fields{grid-template-columns:1fr;}
+  .sq-material-card-compact{grid-template-columns:84px minmax(0,1fr);gap:14px;}
+  .sq-material-card-compact .material-orb{width:84px;height:84px;}
+  .sq-material-card-compact .material-orb span{width:52px;height:52px;font-size:1rem;}
+  .sq-material-card-compact .sq-spec-list{grid-template-columns:1fr;}
+  .sq-material-card-compact .sq-spec-list div{border-right:0;border-bottom:1px solid var(--line);padding-inline:0;}
+  .sq-material-card-compact .sq-spec-list div:last-child{border-bottom:0;}
+  .sq-estimate-panel-side .sq-estimate-grid-clean{grid-template-columns:1fr;}
+  .sq-estimate-panel-side .sq-estimate-grid-clean .sq-price{grid-column:auto;}
+}

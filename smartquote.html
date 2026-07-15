@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css" />
-  <link rel="stylesheet" href="smartquote.css?v=40" />
+  <link rel="stylesheet" href="smartquote.css?v=41" />
   <script type="importmap">
   {
     "imports": {
@@ -50,40 +50,44 @@
 
   <section class="section smartquote-section">
     <div class="container smartquote-layout">
-      <aside class="sq-card sq-material-card">
-        <div class="sq-card-head"><span class="eyebrow">Material</span><h2 id="materialTitle">PLA+</h2></div>
-        <div class="material-orb" id="materialOrb" aria-hidden="true"><span>3D</span></div>
-        <p id="materialDescription">Reliable general-purpose material for prototypes, models, gifts and everyday functional parts.</p>
-        <div class="sq-spec-list">
-          <div><span>Density</span><b id="materialDensity">1.25 g/cm³</b></div>
-          <div><span>Price basis</span><b id="materialPrice">Rs 5,400/kg</b></div>
-          <div><span>Best for</span><b id="materialBestFor">General purpose</b></div>
-        </div>
-      </aside>
-
-      <section class="sq-card sq-viewer-card">
-        <div class="sq-viewer-toolbar">
-          <div><span class="eyebrow">3D Preview</span><b id="viewerFileName">No model loaded</b></div>
-          <button class="sq-mini-btn" id="resetViewBtn" type="button" disabled>Reset View</button>
-        </div>
-        <div class="sq-viewer" id="stlViewer">
-          <div class="sq-upload-zone" id="uploadZone" tabindex="0" role="button" aria-label="Upload STL file">
-            <div class="sq-upload-icon">⇧</div>
-            <h3>Drag your STL model here</h3>
-            <p>or <span class="gold">Browse</span></p>
-            <small>.STL files up to 50 MB</small>
-            <input id="stlFile" type="file" accept=".stl,model/stl" hidden />
+      <div class="sq-preview-column">
+        <section class="sq-card sq-viewer-card">
+          <div class="sq-viewer-toolbar">
+            <div><span class="eyebrow">3D Preview</span><b id="viewerFileName">No model loaded</b></div>
+            <button class="sq-mini-btn" id="resetViewBtn" type="button" disabled>Reset View</button>
           </div>
-          <div class="sq-loading" id="sqLoading" hidden><span></span><b>Analyzing model…</b></div>
-          <canvas id="stlCanvas" hidden></canvas>
-        </div>
-        <div class="sq-model-stats" id="modelStats">
-          <div><span>Dimensions</span><b id="statDimensions">—</b></div>
-          <div><span>Triangles</span><b id="statTriangles">—</b></div>
-          <div><span>Solid Volume</span><b id="statVolume">—</b></div>
-          <div><span>File Size</span><b id="statFileSize">—</b></div>
-        </div>
-      </section>
+          <div class="sq-viewer" id="stlViewer">
+            <div class="sq-upload-zone" id="uploadZone" tabindex="0" role="button" aria-label="Upload STL file">
+              <div class="sq-upload-icon">⇧</div>
+              <h3>Drag your STL model here</h3>
+              <p>or <span class="gold">Browse</span></p>
+              <small>.STL files up to 50 MB</small>
+              <input id="stlFile" type="file" accept=".stl,model/stl" hidden />
+            </div>
+            <div class="sq-loading" id="sqLoading" hidden><span></span><b>Analyzing model…</b></div>
+            <canvas id="stlCanvas" hidden></canvas>
+          </div>
+          <div class="sq-model-stats" id="modelStats">
+            <div><span>Dimensions</span><b id="statDimensions">—</b></div>
+            <div><span>Triangles</span><b id="statTriangles">—</b></div>
+            <div><span>Solid Volume</span><b id="statVolume">—</b></div>
+            <div><span>File Size</span><b id="statFileSize">—</b></div>
+          </div>
+        </section>
+
+        <aside class="sq-card sq-material-card sq-material-card-compact">
+          <div class="material-orb" id="materialOrb" aria-hidden="true"><span>3D</span></div>
+          <div class="sq-material-copy">
+            <div class="sq-card-head"><span class="eyebrow">Material</span><h2 id="materialTitle">PLA+</h2></div>
+            <p id="materialDescription">Reliable general-purpose material for prototypes, models, gifts and everyday functional parts.</p>
+          </div>
+          <div class="sq-spec-list">
+            <div><span>Density</span><b id="materialDensity">1.25 g/cm³</b></div>
+            <div><span>Price basis</span><b id="materialPrice">Rs 5,400/kg</b></div>
+            <div><span>Best for</span><b id="materialBestFor">General purpose</b></div>
+          </div>
+        </aside>
+      </div>
 
       <aside class="sq-card sq-settings-card">
         <div class="sq-card-head"><span class="eyebrow">Print Settings</span><h2>Configure Estimate</h2></div>
@@ -124,12 +128,8 @@
         </div>
         <div class="sq-settings-note">Tree/organic auto support is applied automatically in the backend for every slicer estimate.</div>
       </aside>
-    </div>
-  </section>
 
-  <section class="section no-top">
-    <div class="container">
-      <div class="sq-estimate-panel" id="estimatePanel" aria-live="polite">
+      <div class="sq-estimate-panel sq-estimate-panel-side" id="estimatePanel" aria-live="polite">
         <div class="sq-estimate-header">
           <div><span class="eyebrow">Smart Quote Result</span><h2 id="estimateStatus">Upload an STL to calculate</h2></div>
           <span class="sq-stage-badge" id="stageBadge">Waiting</span>
@@ -183,7 +183,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
 <script src="admin/firebase-config.js"></script>
-<script src="smartquote-config.js?v=40"></script>
-<script type="module" src="smartquote.js?v=40"></script>
+<script src="smartquote-config.js?v=41"></script>
+<script type="module" src="smartquote.js?v=41"></script>
 </body>
 </html>
