@@ -9,7 +9,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="styles.css" />
-  <link rel="stylesheet" href="smartquote.css?v=41" />
+  <link rel="stylesheet" href="smartquote.css?v=42" />
   <script type="importmap">
   {
     "imports": {
@@ -41,9 +41,9 @@
   <section class="page-hero smartquote-hero">
     <div class="container">
       <div class="breadcrumb"><a href="index.html">Home</a> / Smart Quote</div>
-      <span class="eyebrow">Stage 4 · Clean Smart Quote</span>
+      <span class="eyebrow">Smart Quote</span>
       <h1>Upload STL. Preview model. <span class="gold">Get a clean estimate.</span></h1>
-      <p class="lead">Upload an STL model to preview it in 3D. The backend automatically uses tree/organic auto support for every slicer estimate.</p>
+      <p class="lead">Upload an STL model, choose the print settings, then click Estimate Price to receive the real slicer time, filament weight and estimated price.</p>
       <div class="smartquote-notice" id="apiModeNotice"><b>API status:</b> checking configuration…</div>
     </div>
   </section>
@@ -67,26 +67,7 @@
             <div class="sq-loading" id="sqLoading" hidden><span></span><b>Analyzing model…</b></div>
             <canvas id="stlCanvas" hidden></canvas>
           </div>
-          <div class="sq-model-stats" id="modelStats">
-            <div><span>Dimensions</span><b id="statDimensions">—</b></div>
-            <div><span>Triangles</span><b id="statTriangles">—</b></div>
-            <div><span>Solid Volume</span><b id="statVolume">—</b></div>
-            <div><span>File Size</span><b id="statFileSize">—</b></div>
-          </div>
         </section>
-
-        <aside class="sq-card sq-material-card sq-material-card-compact">
-          <div class="material-orb" id="materialOrb" aria-hidden="true"><span>3D</span></div>
-          <div class="sq-material-copy">
-            <div class="sq-card-head"><span class="eyebrow">Material</span><h2 id="materialTitle">PLA+</h2></div>
-            <p id="materialDescription">Reliable general-purpose material for prototypes, models, gifts and everyday functional parts.</p>
-          </div>
-          <div class="sq-spec-list">
-            <div><span>Density</span><b id="materialDensity">1.25 g/cm³</b></div>
-            <div><span>Price basis</span><b id="materialPrice">Rs 5,400/kg</b></div>
-            <div><span>Best for</span><b id="materialBestFor">General purpose</b></div>
-          </div>
-        </aside>
       </div>
 
       <aside class="sq-card sq-settings-card">
@@ -126,43 +107,25 @@
             <input id="sqInfill" type="range" min="5" max="100" step="5" value="10" />
           </label>
         </div>
-        <div class="sq-settings-note">Tree/organic auto support is applied automatically in the backend for every slicer estimate.</div>
+        <div class="sq-settings-note" id="settingsNote">Choose the settings, then click Estimate Price. Tree/organic auto support is applied automatically in the backend.</div>
+        <button class="btn primary sq-estimate-trigger" id="estimatePriceBtn" type="button" disabled>Estimate Price</button>
       </aside>
 
       <div class="sq-estimate-panel sq-estimate-panel-side" id="estimatePanel" aria-live="polite">
         <div class="sq-estimate-header">
-          <div><span class="eyebrow">Smart Quote Result</span><h2 id="estimateStatus">Upload an STL to calculate</h2></div>
+          <div><span class="eyebrow">Smart Quote Result</span><h2 id="estimateStatus">Upload an STL to estimate</h2></div>
           <span class="sq-stage-badge" id="stageBadge">Waiting</span>
         </div>
-        <div class="sq-estimate-grid sq-estimate-grid-clean">
+        <div class="sq-estimate-grid sq-estimate-grid-clean sq-estimate-grid-customer">
           <div><span>Estimated Print Time</span><b id="estTime">—</b></div>
           <div><span>Estimated Filament Weight</span><b id="estWeight">—</b></div>
-          <div><span>Layer Height</span><b id="estLayer">0.20 mm</b></div>
-          <div><span>Wall Loops</span><b id="estWalls">2</b></div>
-          <div><span>Material</span><b id="estMaterial">PLA+</b></div>
-          <div class="sq-price"><span>Estimated Price</span><b id="estPrice">Rs —</b><small id="estPriceUnit">Connect API for real slicer estimate</small></div>
+          <div class="sq-price"><span>Estimated Price</span><b id="estPrice">Rs —</b><small id="estPriceUnit">Click Estimate Price after choosing the settings</small></div>
         </div>
         <div class="sq-breakdown" id="sqBreakdown" hidden></div>
         <div class="sq-estimate-actions">
-          <button class="btn primary" id="sendToQuoteBtn" type="button" disabled>Use in Quotation Request</button>
-          <button class="btn ghost" id="recalculateBtn" type="button" disabled>Recalculate</button>
+          <button class="btn ghost" id="sendToQuoteBtn" type="button" disabled>Use in Quotation Request</button>
           <button class="btn ghost" id="uploadAnotherBtn" type="button" disabled>Upload Another STL</button>
         </div>
-      </div>
-    </div>
-  </section>
-
-  <section class="section alt-section">
-    <div class="container split">
-      <div class="glass-panel">
-        <span class="eyebrow">Backend</span>
-        <h2>Real slicer estimate ready.</h2>
-        <div class="check-list"><div>3D preview still works in the browser.</div><div>STL and visible print settings are sent to the Quote API.</div><div>Backend applies tree/organic auto support automatically.</div><div>Customer result stays clean and simple.</div></div>
-      </div>
-      <div class="glass-panel">
-        <span class="eyebrow">Public backend</span>
-        <h2>Real quote only.</h2>
-        <p class="lead">If the Smart Quote backend is offline, the page clearly reports the exact connection or slicer error instead of showing a browser fallback price.</p>
       </div>
     </div>
   </section>
@@ -183,7 +146,7 @@
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
 <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
 <script src="admin/firebase-config.js"></script>
-<script src="smartquote-config.js?v=41"></script>
-<script type="module" src="smartquote.js?v=41"></script>
+<script src="smartquote-config.js?v=42"></script>
+<script type="module" src="smartquote.js?v=42"></script>
 </body>
 </html>

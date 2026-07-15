@@ -17,7 +17,7 @@ const colorSelect = $('#sqColor');
 const wallSelect = $('#sqWalls');
 const infill = $('#sqInfill');
 const quantity = $('#sqQuantity');
-const recalculateBtn = $('#recalculateBtn');
+const estimatePriceBtn = $('#estimatePriceBtn');
 function normalizeApiUrl(value){
   return String(value || '').trim().replace(/\/+$/, '');
 }
@@ -38,6 +38,7 @@ function isLocalPage(){
 let API_URLS = [];
 let lastWorkingApiUrl = normalizeApiUrl(localStorage.getItem('trinid-smartquote-working-api'));
 let lastEstimate = null;
+let PUBLIC_PRICING_PROFILES = {};
 const apiHealthCache = new Map();
 
 function setConfiguredApiUrl(cloudUrl = ''){
@@ -128,6 +129,44 @@ function normalizeCloudProfitMargin(value){
   return Math.max(0,Math.min(1000,n));
 }
 
+function normalizePublicPricingProfile(raw, fallbackName=''){
+  if(!raw || typeof raw !== 'object') return null;
+  const number = (key, fallback=0) => {
+    const value = Number(String(raw[key] ?? fallback).replace(/,/g,'').trim());
+    return Number.isFinite(value) ? value : fallback;
+  };
+  return {
+    profileName: String(raw.profileName || fallbackName || '').trim(),
+    P: number('P'),
+    rho: number('rho', 1.24),
+    d_mm: number('d_mm', 1.75),
+    W: number('W'),
+    R: number('R'),
+    Cp: number('Cp'),
+    H: number('H'),
+    F: number('F'),
+    Cups: number('Cups'),
+    Hups: number('Hups')
+  };
+}
+
+function setPublicPricingProfiles(raw){
+  const next = {};
+  if(raw && typeof raw === 'object'){
+    for(const key of ['PLA+','PETG+']){
+      const profile = normalizePublicPricingProfile(raw[key], key);
+      if(profile) next[key] = profile;
+    }
+  }
+  const changed = JSON.stringify(next) !== JSON.stringify(PUBLIC_PRICING_PROFILES);
+  PUBLIC_PRICING_PROFILES = next;
+  return changed;
+}
+
+function selectedPublicPricingProfile(){
+  return PUBLIC_PRICING_PROFILES[materialSelect?.value] || null;
+}
+
 async function initSmartQuoteCloudConfig(){
   if(!window.firebase || !window.TRINID_FIREBASE_CONFIG){
     console.warn('Smart Quote cloud margin unavailable; using fallback 75%.');
@@ -144,11 +183,12 @@ async function initSmartQuoteCloudConfig(){
     smartQuoteConfigUnsubscribe=store.doc(SMARTQUOTE_CONFIG_DOC_PATH).onSnapshot(snapshot=>{
       const data=snapshot.exists ? (snapshot.data()||{}) : {};
       const nextMargin=normalizeCloudProfitMargin(data.profitMargin);
-      const changed=nextMargin!==PRICING.profitMargin;
+      const marginChanged=nextMargin!==PRICING.profitMargin;
       PRICING.profitMargin=nextMargin;
       const apiChanged=setConfiguredApiUrl(data.backendApiUrl || data.publicApiUrl || '');
-      if((changed || apiChanged) && modelData) calculateEstimate();
-      console.info(`Smart Quote config synced: margin ${PRICING.profitMargin}%, API ${API_URLS[0] || 'not configured'}`);
+      const pricingChanged=setPublicPricingProfiles(data.pricingProfiles || {});
+      if((marginChanged || apiChanged || pricingChanged) && modelData) markEstimatePending('Pricing/settings updated. Click Estimate Price again.');
+      console.info(`Smart Quote config synced: margin ${PRICING.profitMargin}%, API ${API_URLS[0] || 'not configured'}, public pricing ${Object.keys(PUBLIC_PRICING_PROFILES).join(', ') || 'fallback'}`);
     },err=>{
       console.warn('Smart Quote margin listener failed; using current fallback.',err);
     });
@@ -201,7 +241,7 @@ function resetSmartQuoteIdleState(){
     resetViewBtn.disabled=true;
     uploadAnotherBtn.disabled=true;
     sendToQuoteBtn.disabled=true;
-    if(recalculateBtn) recalculateBtn.disabled=true;
+    if(estimatePriceBtn) estimatePriceBtn.disabled=true;
     const name=$('#viewerFileName');
     if(name) name.textContent='No model loaded';
   }
@@ -350,17 +390,13 @@ async function loadSTL(file){
     await showPreviewCanvas();
     resetViewBtn.disabled=false;
     uploadAnotherBtn.disabled=false;
-    sendToQuoteBtn.disabled=false;
-    if(recalculateBtn) recalculateBtn.disabled=false;
+    sendToQuoteBtn.disabled=true;
+    if(estimatePriceBtn) estimatePriceBtn.disabled=false;
     $('#viewerFileName').textContent=file.name;
-    $('#statDimensions').textContent=`${fmt(stats.size.x,1)} × ${fmt(stats.size.y,1)} × ${fmt(stats.size.z,1)} mm`;
-    $('#statTriangles').textContent=Math.round(stats.triangles).toLocaleString();
-    $('#statVolume').textContent=`${fmt(stats.volumeMm3/1000,2)} cm³`;
-    $('#statFileSize').textContent=fmtBytes(file.size);
     applyModelColor();
     fitCamera();
     renderer.render(scene,camera);
-    calculateEstimate();
+    markEstimatePending('Model ready. Choose the settings, then click Estimate Price.');
   }catch(err){ console.error(err); alert(`Could not analyze this STL. ${err.message||''}`); }
   finally{ loading.hidden=true; setAnalysisStatus('Analyzing model…'); if(mesh){ resizeViewer(); fitCamera(); renderer.render(scene,camera); } }
 }
@@ -415,6 +451,8 @@ function buildQuoteFormData(){
   fd.append('walls', String(selectedWalls()));
   fd.append('quantity', quantity.value || '1');
   fd.append('profit_margin', String(PRICING.profitMargin));
+  const publicProfile=selectedPublicPricingProfile();
+  if(publicProfile) fd.append('pricing_profile', JSON.stringify(publicProfile));
   return fd;
 }
 
@@ -504,15 +542,15 @@ function renderEstimate(estimate){
   $('#estimateStatus').textContent=`${estimate.fileName} · ${estimate.quantity} item${estimate.quantity===1?'':'s'}`;
   $('#estTime').textContent=fmtTime(estimate.printTimeMinutes);
   $('#estWeight').textContent=`${fmt(estimate.weightG,2)} g`;
-  if($('#estWalls')) $('#estWalls').textContent=String(estimate.wallLoops || selectedWalls());
-  if($('#estMaterial')) $('#estMaterial').textContent=estimate.material || materialSelect.value;
   $('#estPrice').textContent=`Rs ${ceilRs(estimate.totalPrice).toLocaleString()}`;
   $('#estPriceUnit').textContent=estimate.quantity>1?`Rs ${ceilRs(estimate.unitPrice).toLocaleString()} each · real slicer estimate`:'Real slicer estimate';
   const bd=$('#sqBreakdown');
   if(bd){ bd.hidden=true; bd.innerHTML=''; }
-  const note = $('.sq-settings-note') || $('#settingsNote');
+  if(estimatePriceBtn){ estimatePriceBtn.textContent='Recalculate Price'; estimatePriceBtn.disabled=false; }
+  sendToQuoteBtn.disabled=false;
+  const note = $('#settingsNote') || $('.sq-settings-note');
   if(note){
-    note.textContent = isReal ? 'Real slicer API result is being shown. Tree/organic auto support is applied in the backend.' : 'The Smart Quote backend is required for the final quote.';
+    note.textContent = isReal ? 'Real slicer result shown. Change any setting and click Recalculate Price to update it.' : 'The Smart Quote backend is required for the final quote.';
   }
 }
 
@@ -521,30 +559,46 @@ function showBackendError(message){
   if(badge){ badge.textContent='Backend not connected'; badge.className='sq-stage-badge warn'; }
   const status=$('#estimateStatus');
   if(status) status.textContent=currentFile ? `${currentFile.name} · backend unavailable` : 'Backend unavailable';
-  const note=$('.sq-settings-note') || $('#settingsNote');
+  const note=$('#settingsNote') || $('.sq-settings-note');
   if(note) note.textContent=`Smart Quote backend failed: ${message}`;
   $('#estTime').textContent='—';
   $('#estWeight').textContent='—';
-  $('#estLayer').textContent=`${QUALITY[qualitySelect.value].layer.toFixed(2)} mm`;
-  if($('#estWalls')) $('#estWalls').textContent=String(selectedWalls());
-  if($('#estMaterial')) $('#estMaterial').textContent=materialSelect.value;
   $('#estPrice').textContent='—';
   const unit=$('#estPriceUnit');
-  if(unit) unit.textContent='The Smart Quote backend is required for the final quote.';
+  if(unit) unit.textContent='The Smart Quote backend is required for the estimate.';
+  sendToQuoteBtn.disabled=true;
+  if(estimatePriceBtn){ estimatePriceBtn.disabled=false; estimatePriceBtn.textContent='Estimate Price'; }
+}
+
+
+function markEstimatePending(message='Choose the settings, then click Estimate Price.'){
+  if(!modelData) return;
+  modelData.estimate=null;
+  lastEstimate=null;
+  sendToQuoteBtn.disabled=true;
+  if(estimatePriceBtn){
+    estimatePriceBtn.disabled=false;
+    estimatePriceBtn.textContent='Estimate Price';
+  }
+  const badge=$('#stageBadge');
+  if(badge){ badge.textContent='Ready'; badge.className='sq-stage-badge'; }
+  const status=$('#estimateStatus');
+  if(status) status.textContent=`${currentFile?.name || 'Model'} · ready to estimate`;
+  $('#estTime').textContent='—';
+  $('#estWeight').textContent='—';
+  $('#estPrice').textContent='Rs —';
+  const unit=$('#estPriceUnit');
+  if(unit) unit.textContent='Click Estimate Price after choosing the settings';
+  const note=$('#settingsNote') || $('.sq-settings-note');
+  if(note) note.textContent=message;
 }
 
 async function calculateEstimate(){
-  const q=QUALITY[qualitySelect.value];
   $('#infillValue').textContent=`${infill.value}%`;
-  $('#estLayer').textContent=`${q.layer.toFixed(2)} mm`;
-  if($('#estWalls')) $('#estWalls').textContent=String(selectedWalls());
-  if($('#estMaterial')) $('#estMaterial').textContent=materialSelect.value;
-  updateMaterialCard();
-  if(!modelData){ return; }
+  if(!modelData) return;
   try{
-    if(!API_URLS.length){
-      throw new Error('Public Smart Quote API URL is not configured.');
-    }
+    if(!API_URLS.length) throw new Error('Public Smart Quote API URL is not configured.');
+    if(estimatePriceBtn){ estimatePriceBtn.disabled=true; estimatePriceBtn.textContent='Estimating…'; }
     showLoading('Sending STL to the Smart Quote slicer backend…');
     const estimate=await apiEstimate();
     renderEstimate(estimate);
@@ -556,17 +610,13 @@ async function calculateEstimate(){
   }
 }
 
-function updateMaterialCard(){
-  const mat=MATERIALS[materialSelect.value];
-  $('#materialTitle').textContent=materialSelect.value; if($('#estMaterial')) $('#estMaterial').textContent=materialSelect.value; $('#materialDescription').textContent=mat.description; $('#materialDensity').textContent=`${mat.density.toFixed(2)} g/cm³`; $('#materialPrice').textContent=`Rs ${mat.priceKg.toLocaleString()}/kg`; $('#materialBestFor').textContent=mat.best;
-  const current=colorSelect.value; colorSelect.innerHTML=mat.colors.map(c=>`<option value="${c}">${c}</option>`).join(''); if(mat.colors.includes(current)) colorSelect.value=current; else colorSelect.value=mat.colors[0]; refreshCustomSelect(colorSelect); refreshCustomSelect(materialSelect);
-  const orb=$('#materialOrb'); const c=MODEL_COLORS[colorSelect.value]||0x202329; orb.style.setProperty('--orb-color',`#${c.toString(16).padStart(6,'0')}`);
-}
-function syncOrbColor(){ const c=MODEL_COLORS[colorSelect.value]||0x202329; const hex=`#${c.toString(16).padStart(6,'0')}`; $('#materialOrb span').style.background=`linear-gradient(145deg, color-mix(in srgb, ${hex} 70%, white), ${hex})`; }
-
-
-function closeAllCustomSelects(except){
-  document.querySelectorAll('.td-select.open').forEach(w=>{ if(w!==except) w.classList.remove('open'); });
+function updateMaterialOptions(){
+  const mat=MATERIALS[materialSelect.value] || MATERIALS['PLA+'];
+  const current=colorSelect.value;
+  colorSelect.innerHTML=mat.colors.map(c=>`<option value="${c}">${c}</option>`).join('');
+  colorSelect.value=mat.colors.includes(current) ? current : mat.colors[0];
+  refreshCustomSelect(colorSelect);
+  refreshCustomSelect(materialSelect);
 }
 function refreshCustomSelect(select){
   const wrapper=select?.closest?.('.td-select');
@@ -631,11 +681,14 @@ fileInput.addEventListener('change',()=>loadSTL(fileInput.files[0]));
 ['dragleave','drop'].forEach(ev=>uploadZone.addEventListener(ev,e=>{e.preventDefault();uploadZone.classList.remove('dragging');}));
 uploadZone.addEventListener('drop',e=>loadSTL(e.dataTransfer.files[0]));
 resetViewBtn.addEventListener('click',fitCamera);
-if(recalculateBtn) recalculateBtn.addEventListener('click',calculateEstimate);
+if(estimatePriceBtn) estimatePriceBtn.addEventListener('click',calculateEstimate);
 uploadAnotherBtn.addEventListener('click',()=>fileInput.click());
-materialSelect.addEventListener('change',()=>{updateMaterialCard();syncOrbColor();calculateEstimate();applyModelColor();});
-colorSelect.addEventListener('change',()=>{syncOrbColor();applyModelColor();calculateEstimate();});
-qualitySelect.addEventListener('change',calculateEstimate); if(wallSelect) wallSelect.addEventListener('change',calculateEstimate); infill.addEventListener('input',calculateEstimate); quantity.addEventListener('input',calculateEstimate);
+materialSelect.addEventListener('change',()=>{updateMaterialOptions();applyModelColor();markEstimatePending();});
+colorSelect.addEventListener('change',()=>{applyModelColor();markEstimatePending();});
+qualitySelect.addEventListener('change',()=>markEstimatePending());
+if(wallSelect) wallSelect.addEventListener('change',()=>markEstimatePending());
+infill.addEventListener('input',()=>{ $('#infillValue').textContent=`${infill.value}%`; markEstimatePending(); });
+quantity.addEventListener('input',()=>markEstimatePending());
 sendToQuoteBtn.addEventListener('click',()=>{
   if(!modelData?.estimate) return;
   localStorage.setItem('trinid-smartquote-draft',JSON.stringify(modelData.estimate));
@@ -649,9 +702,8 @@ resetSmartQuoteIdleState();
 setConfiguredApiUrl();
 apiMode();
 initCustomSelects();
-updateMaterialCard();
+updateMaterialOptions();
 colorSelect.value='Black';
-syncOrbColor();
+refreshCustomSelect(colorSelect);
 initViewer();
-calculateEstimate();
 initSmartQuoteCloudConfig();
