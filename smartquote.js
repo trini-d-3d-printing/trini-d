@@ -16,6 +16,9 @@ const qualitySelect = $('#sqQuality');
 const colorSelect = $('#sqColor');
 const infill = $('#sqInfill');
 const quantity = $('#sqQuantity');
+const recalculateBtn = $('#recalculateBtn');
+const API_URL = (window.TRINID_QUOTE_API_URL || '').replace(/\/$/, '');
+let lastEstimate = null;
 
 const MATERIALS = {
   'PLA+': { density: 1.25, priceKg: 5400, colors: ['Black','White','Gray','Gold','Red','Blue'], best: 'General purpose', description: 'Reliable general-purpose material for prototypes, models, gifts and everyday functional parts.' },
@@ -44,6 +47,25 @@ function clamp(v,min,max){ return Math.min(max,Math.max(min,v)); }
 function fmt(n,d=2){ return Number(n||0).toLocaleString(undefined,{minimumFractionDigits:d,maximumFractionDigits:d}); }
 function fmtBytes(bytes){ if(bytes < 1024) return `${bytes} B`; if(bytes < 1024**2) return `${fmt(bytes/1024,1)} KB`; return `${fmt(bytes/1024**2,1)} MB`; }
 function fmtTime(minutes){ const total=Math.max(0,Math.round(minutes)); const d=Math.floor(total/1440); const h=Math.floor((total%1440)/60); const m=total%60; return [d?`${d}d`:null,h?`${h}h`:null,(m||(!d&&!h))?`${m}m`:null].filter(Boolean).join(' '); }
+function apiMode(){
+  const notice = $('#apiModeNotice');
+  if(!notice) return;
+  if(API_URL){
+    notice.innerHTML = `<b>API status:</b> connected to ${API_URL}. Real slicer mode is used while your localhost backend is running.`;
+  }else{
+    notice.innerHTML = '<b>API status:</b> API URL is blank. Browser fallback estimate is active.';
+  }
+}
+
+function showLoading(message){
+  if(loading){
+    const label = loading.querySelector('b');
+    if(label) label.textContent = message || 'Analyzing model…';
+    loading.hidden = false;
+  }
+}
+function hideLoading(){ if(loading) loading.hidden = true; }
+
 
 function normalizeCloudProfitMargin(value){
   const n=Number(String(value ?? '').replace(/,/g,'').trim());
@@ -123,6 +145,7 @@ function resetSmartQuoteIdleState(){
     resetViewBtn.disabled=true;
     uploadAnotherBtn.disabled=true;
     sendToQuoteBtn.disabled=true;
+    if(recalculateBtn) recalculateBtn.disabled=true;
     const name=$('#viewerFileName');
     if(name) name.textContent='No model loaded';
   }
@@ -272,6 +295,7 @@ async function loadSTL(file){
     resetViewBtn.disabled=false;
     uploadAnotherBtn.disabled=false;
     sendToQuoteBtn.disabled=false;
+    if(recalculateBtn) recalculateBtn.disabled=false;
     $('#viewerFileName').textContent=file.name;
     $('#statDimensions').textContent=`${fmt(stats.size.x,1)} × ${fmt(stats.size.y,1)} × ${fmt(stats.size.z,1)} mm`;
     $('#statTriangles').textContent=Math.round(stats.triangles).toLocaleString();
@@ -285,14 +309,14 @@ async function loadSTL(file){
   finally{ loading.hidden=true; setAnalysisStatus('Analyzing model…'); if(mesh){ resizeViewer(); fitCamera(); renderer.render(scene,camera); } }
 }
 
-function calculateEstimate(){
+function browserEstimate(){
   const q=QUALITY[qualitySelect.value];
-  $('#infillValue').textContent=`${infill.value}%`; $('#estLayer').textContent=`${q.layer.toFixed(2)} mm`;
-  updateMaterialCard();
-  if(!modelData){ return; }
-  const mat=MATERIALS[materialSelect.value]; const infillRatio=Number(infill.value)/100; const qty=clamp(parseInt(quantity.value||'1',10)||1,1,100); quantity.value=qty;
-  const solid=modelData.volumeMm3; const surface=modelData.surfaceAreaMm2;
-  // Geometry-only approximation: shell + partial internal infill. Real slicing will replace this in Stage 2.
+  const mat=MATERIALS[materialSelect.value];
+  const infillRatio=Number(infill.value)/100;
+  const qty=clamp(parseInt(quantity.value||'1',10)||1,1,100);
+  quantity.value=qty;
+  const solid=modelData.volumeMm3;
+  const surface=modelData.surfaceAreaMm2;
   const shellThickness=0.55*Math.pow(0.20/q.layer,0.08);
   const shellVolume=Math.min(solid*0.72,surface*shellThickness);
   const inner=Math.max(0,solid-shellVolume);
@@ -311,20 +335,94 @@ function calculateEstimate(){
   const unitCost=filamentCost+electricityCost+machineCost;
   const unitPrice=ceilRs(unitCost*(1+PRICING.profitMargin/100));
   const totalPrice=ceilRs(unitCost*qty*(1+PRICING.profitMargin/100));
-  const estimate={
-    fileName:currentFile.name, material:materialSelect.value, color:colorSelect.value, quality:qualitySelect.options[qualitySelect.selectedIndex].text, qualityKey:qualitySelect.value,
+  return {
+    source:'browser-fallback', slicerEngine:'', fileName:currentFile.name,
+    material:materialSelect.value, color:colorSelect.value, quality:qualitySelect.options[qualitySelect.selectedIndex].text, qualityKey:qualitySelect.value,
     layerHeightMm:q.layer, infill:Number(infill.value), quantity:qty,
     dimensions:{x:modelData.size.x,y:modelData.size.y,z:modelData.size.z}, triangles:modelData.triangles, solidVolumeCm3:solid/1000,
     printTimeMinutes:timeMinutes*qty, unitPrintTimeMinutes:timeMinutes, weightG:weightG*qty, unitWeightG:weightG, filamentLengthM:lengthM*qty, unitFilamentLengthM:lengthM,
-    unitPrice,totalPrice, profitMargin:PRICING.profitMargin, createdAt:new Date().toISOString(), stage:'browser-preliminary'
+    unitPrice,totalPrice, profitMargin:PRICING.profitMargin, createdAt:new Date().toISOString(), stage:'browser-preliminary',
+    costBreakdown:{filament:ceilRs(filamentCost),electricity:ceilRs(electricityCost),machine:ceilRs(machineCost),risk:0,totalCost:ceilRs(unitCost),profit:ceilRs(unitPrice-unitCost)}
   };
-  modelData.estimate=estimate;
-  $('#estimateStatus').textContent=`${currentFile.name} · ${qty} item${qty===1?'':'s'}`;
+}
+
+async function apiEstimate(){
+  const fd=new FormData();
+  fd.append('model_file', currentFile, currentFile.name);
+  fd.append('material', materialSelect.value);
+  fd.append('color', colorSelect.value);
+  fd.append('quality', qualitySelect.value);
+  fd.append('infill', infill.value);
+  fd.append('quantity', quantity.value || '1');
+  fd.append('profit_margin', String(PRICING.profitMargin));
+  const res=await fetch(`${API_URL}/api/quote`, { method:'POST', body:fd });
+  let json;
+  try{ json=await res.json(); }catch{ json={ detail: await res.text() }; }
+  if(!res.ok) throw new Error(json.detail || `API error ${res.status}`);
+  const q=json.quote || {}, total=q.total || {}, unit=q.unit || {}, m=json.model || {}, settings=json.settings || {};
+  return {
+    source:json.source || 'real-slicer', slicerEngine:json.slicerEngine || '', fileName:currentFile.name,
+    material:settings.material || materialSelect.value, color:settings.color || colorSelect.value, quality:qualitySelect.options[qualitySelect.selectedIndex].text, qualityKey:qualitySelect.value,
+    layerHeightMm:settings.layerHeightMm || QUALITY[qualitySelect.value].layer, infill:Number(settings.infill || infill.value), quantity:Number(settings.quantity || quantity.value || 1),
+    dimensions:{x:m.dimensionsMm?.x || modelData.size.x, y:m.dimensionsMm?.y || modelData.size.y, z:m.dimensionsMm?.z || modelData.size.z},
+    triangles:m.triangles || modelData.triangles, solidVolumeCm3:m.solidVolumeCm3 || modelData.volumeMm3/1000,
+    printTimeMinutes:total.printTimeMinutes || 0, unitPrintTimeMinutes:unit.printTimeMinutes || 0,
+    weightG:total.weightG || 0, unitWeightG:unit.weightG || 0,
+    filamentLengthM:total.filamentLengthM || 0, unitFilamentLengthM:unit.filamentLengthM || 0,
+    unitPrice:unit.price || 0, totalPrice:total.price || 0, profitMargin:PRICING.profitMargin,
+    createdAt:new Date().toISOString(), stage:'real-slicer',
+    costBreakdown:{filament:unit.filamentCost,electricity:unit.electricityCost,machine:unit.machineCost,risk:unit.riskCost || 0,totalCost:unit.totalCost,profit:unit.profit}
+  };
+}
+
+function renderEstimate(estimate){
+  const isReal = String(estimate.source || '').includes('slicer') && !String(estimate.source || '').includes('fallback');
+  const badge = $('#stageBadge');
+  if(badge){
+    badge.textContent = isReal ? 'Real Slicer' : 'Fallback';
+    badge.className = `sq-stage-badge ${isReal ? 'real' : 'warn'}`;
+  }
+  modelData.estimate = estimate;
+  lastEstimate = estimate;
+  $('#estimateStatus').textContent=`${estimate.fileName} · ${estimate.quantity} item${estimate.quantity===1?'':'s'}`;
   $('#estTime').textContent=fmtTime(estimate.printTimeMinutes);
   $('#estWeight').textContent=`${fmt(estimate.weightG,2)} g`;
   $('#estLength').textContent=`${fmt(estimate.filamentLengthM,2)} m`;
-  $('#estPrice').textContent=`Rs ${totalPrice.toLocaleString()}`;
-  $('#estPriceUnit').textContent=qty>1?`Rs ${unitPrice.toLocaleString()} each · final after slicer review`:'Final quote after slicer review';
+  $('#estPrice').textContent=`Rs ${ceilRs(estimate.totalPrice).toLocaleString()}`;
+  $('#estPriceUnit').textContent=estimate.quantity>1?`Rs ${ceilRs(estimate.unitPrice).toLocaleString()} each · ${isReal?'real slicer estimate':'browser fallback estimate'}`:(isReal?'Real slicer estimate':'Browser fallback estimate');
+  const bd=$('#sqBreakdown');
+  if(bd && estimate.costBreakdown && typeof estimate.costBreakdown.totalCost !== 'undefined'){
+    bd.hidden=false;
+    bd.innerHTML=`<table><tr><th>Cost part</th><th>Unit value</th></tr><tr><td>Filament</td><td>Rs ${ceilRs(estimate.costBreakdown.filament).toLocaleString()}</td></tr><tr><td>Electricity</td><td>Rs ${ceilRs(estimate.costBreakdown.electricity).toLocaleString()}</td></tr><tr><td>Machine</td><td>Rs ${ceilRs(estimate.costBreakdown.machine).toLocaleString()}</td></tr><tr><td>Risk</td><td>Rs ${ceilRs(estimate.costBreakdown.risk || 0).toLocaleString()}</td></tr><tr><td>Total Cost</td><td>Rs ${ceilRs(estimate.costBreakdown.totalCost).toLocaleString()}</td></tr><tr><td>Profit</td><td>Rs ${ceilRs(estimate.costBreakdown.profit).toLocaleString()}</td></tr></table>`;
+  }else if(bd){ bd.hidden=true; }
+  const note = $('.sq-settings-note') || $('#settingsNote');
+  if(note){
+    note.textContent = estimate.apiError ? `API failed, browser fallback shown: ${estimate.apiError}` : (isReal ? 'Real slicer API result is being shown.' : 'Browser fallback is shown until the API is connected or slicer succeeds.');
+  }
+}
+
+async function calculateEstimate(){
+  const q=QUALITY[qualitySelect.value];
+  $('#infillValue').textContent=`${infill.value}%`;
+  $('#estLayer').textContent=`${q.layer.toFixed(2)} mm`;
+  updateMaterialCard();
+  if(!modelData){ return; }
+  let estimate;
+  try{
+    if(API_URL){
+      showLoading('Sending STL to Smart Quote API…');
+      estimate=await apiEstimate();
+    }else{
+      estimate=browserEstimate();
+    }
+  }catch(err){
+    console.warn(err);
+    estimate=browserEstimate();
+    estimate.apiError=err.message || String(err);
+  }finally{
+    hideLoading();
+  }
+  renderEstimate(estimate);
 }
 
 function updateMaterialCard(){
@@ -342,6 +440,7 @@ fileInput.addEventListener('change',()=>loadSTL(fileInput.files[0]));
 ['dragleave','drop'].forEach(ev=>uploadZone.addEventListener(ev,e=>{e.preventDefault();uploadZone.classList.remove('dragging');}));
 uploadZone.addEventListener('drop',e=>loadSTL(e.dataTransfer.files[0]));
 resetViewBtn.addEventListener('click',fitCamera);
+if(recalculateBtn) recalculateBtn.addEventListener('click',calculateEstimate);
 uploadAnotherBtn.addEventListener('click',()=>fileInput.click());
 materialSelect.addEventListener('change',()=>{updateMaterialCard();syncOrbColor();calculateEstimate();applyModelColor();});
 colorSelect.addEventListener('change',()=>{syncOrbColor();applyModelColor();calculateEstimate();});
@@ -356,6 +455,7 @@ canvas.addEventListener('webglcontextlost',e=>{ e.preventDefault(); console.warn
 canvas.addEventListener('webglcontextrestored',()=>{ resizeViewer(); if(mesh) fitCamera(); });
 
 resetSmartQuoteIdleState();
+apiMode();
 updateMaterialCard();
 colorSelect.value='Black';
 syncOrbColor();

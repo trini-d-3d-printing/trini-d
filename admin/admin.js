@@ -3,6 +3,7 @@
 const STORAGE_KEY = 'trinid_admin_database_v1';
 const QUOTE_DRAFT_KEY = 'trinid_admin_quote_draft_v2';
 const BILL_DRAFT_KEY = 'trinid_admin_invoice_draft_v2';
+const CUSTOMER_PDF_OPTIONS_KEY = 'trinid_admin_customer_pdf_options_v1';
 const CLOUD_DOC_PATH = 'trinid/default';
 const SMARTQUOTE_CONFIG_DOC_PATH = 'trinid/default/public/smartquote';
 
@@ -38,6 +39,8 @@ const prettyDate = value => {
 };
 const round2 = value => Math.round(num(value) * 100) / 100;
 const CONFIG_KEYS = ['P', 'rho', 'd_mm', 'W', 'R', 'Cp', 'H', 'F', 'Cups', 'Hups'];
+const LINE_MATERIAL_OPTIONS = ['PLA+', 'PETG+'];
+const LINE_COLOR_OPTIONS = ['Black', 'White', 'Gray', 'Red', 'Blue', 'Green', 'Yellow', 'Orange', 'Gold', 'Silver', 'Transparent', 'Natural'];
 
 // Material profile library for FDM/FFF filament pricing.
 // Densities and starter prices are editable defaults, not supplier quotes.
@@ -790,7 +793,7 @@ function addCalculatorResultToLine(type) {
     saveQuoteDraft();
   }
   if (type === 'bill') {
-    addBillRow({ model: result.model, materialType: hasOwn(result, 'materialType') ? result.materialType : 'PLA+', color: hasOwn(result, 'color') ? result.color : 'Black', qty: 1, unit: result.price, discount: 0, cost: result.totalCost });
+    addBillRow({ model: result.model, materialType: hasOwn(result, 'materialType') ? result.materialType : 'PLA+', color: hasOwn(result, 'color') ? result.color : 'Black', qty: 1, unit: result.price, discount: 0, cost: result.totalCost, weight: `${result.weightG.toFixed(2)} g`, printTime: minutesLabel(result.printTimeMinutes) });
     saveBillDraft();
   }
   toast(`Calculator result added to ${type === 'bill' ? 'Bill' : 'Quotation'}`);
@@ -809,13 +812,74 @@ function lineInput(value, cls = '', type = 'text') {
   return `<input class="${cls}" type="${inputType}"${stepAttr} value="${safe(value ?? '')}">`;
 }
 
+function lineSelect(value, cls = '', options = [], fallback = '') {
+  const current = String(value ?? fallback ?? '');
+  return `<select class="${cls}">${options.map(opt => `<option value="${safe(opt)}"${current === opt ? ' selected' : ''}>${safe(opt)}</option>`).join('')}</select>`;
+}
+
+function readCustomerPdfOptions() {
+  try {
+    return { quoteShowSpecs: true, billShowSpecs: true, quoteUseCustomerName: false, billUseCustomerName: false, ...(JSON.parse(localStorage.getItem(CUSTOMER_PDF_OPTIONS_KEY) || '{}') || {}) };
+  } catch (e) {
+    return { quoteShowSpecs: true, billShowSpecs: true, quoteUseCustomerName: false, billUseCustomerName: false };
+  }
+}
+
+function writeCustomerPdfOptions() {
+  const payload = {
+    quoteShowSpecs: !!$('#quoteShowCustomerSpecs')?.checked,
+    billShowSpecs: !!$('#billShowCustomerSpecs')?.checked,
+    quoteUseCustomerName: !!$('#quoteUseCustomerFileName')?.checked,
+    billUseCustomerName: !!$('#billUseCustomerFileName')?.checked
+  };
+  try { localStorage.setItem(CUSTOMER_PDF_OPTIONS_KEY, JSON.stringify(payload)); } catch (e) {}
+  return payload;
+}
+
+function serviceInfo(kind) {
+  const prefix = kind === 'bill' ? 'bill' : 'quote';
+  const name = $(`#${prefix}ServiceName`)?.value.trim() || 'Model Design / Other Service';
+  const charge = ceilCurrency($(`#${prefix}ServiceCharge`)?.value || 0);
+  return { name, charge };
+}
+
+function addServiceLine(items, kind) {
+  const service = serviceInfo(kind);
+  if (!service.charge) return items.slice();
+  return [...items, {
+    model: service.name,
+    materialType: '',
+    color: '',
+    qty: 1,
+    unitPrice: service.charge,
+    discount: 0,
+    cost: 0,
+    layer: '',
+    walls: '',
+    infill: '',
+    weight: '',
+    printTime: '',
+    isService: true
+  }];
+}
+
+function safeFilePart(value) {
+  return String(value || '').trim().replace(/[\/:*?"<>|]+/g, '').replace(/\s+/g, '_').replace(/_+/g, '_').slice(0, 60);
+}
+
+function customerFileTitle(prefix, no, customer, useCustomerName) {
+  const parts = [prefix, safeFilePart(no) || docId(prefix === 'Invoice' ? 'INV' : 'QT')];
+  if (useCustomerName && customer) parts.push(safeFilePart(customer));
+  return `${parts.filter(Boolean).join('_')}.pdf`;
+}
+
 function addBillRow(data = {}) {
   const tr = document.createElement('tr');
   tr.dataset.calcKey = data.calcKey || '';
   tr.innerHTML = `
     <td>${lineInput(data.model || '', 'model-input')}</td>
-    <td>${lineInput(materialText(data), 'material-input')}</td>
-    <td>${lineInput(colorText(data), 'color-input')}</td>
+    <td>${lineSelect(materialText(data) || 'PLA+', 'material-input', LINE_MATERIAL_OPTIONS, 'PLA+')}</td>
+    <td>${lineSelect(colorText(data) || 'Black', 'color-input', LINE_COLOR_OPTIONS, 'Black')}</td>
     <td>${lineInput(data.qty || 1, 'qty-input', 'number')}</td>
     <td>${lineInput(data.unitPrice ?? data.unit ?? '', 'unit-input', 'number')}</td>
     <td>${lineInput(data.discount || 0, 'discount-input', 'number')}</td>
@@ -823,6 +887,8 @@ function addBillRow(data = {}) {
     <td>${lineInput(data.layer || '0.2', 'layer-input')}</td>
     <td><select class="walls-input"><option></option>${['1','2','3','4','5','6','Custom'].map(v => `<option${data.walls == v ? ' selected' : ''}>${v}</option>`).join('')}</select></td>
     <td>${lineInput(data.infill || '', 'infill-input')}</td>
+    <td>${lineInput(data.weight || '', 'weight-input')}</td>
+    <td>${lineInput(data.printTime || '', 'time-input')}</td>
     <td><button class="row-delete" type="button">×</button></td>`;
   $('#billItemsBody').appendChild(tr);
   recalcBill();
@@ -838,8 +904,8 @@ function addQuoteRow(data = {}) {
   tr.dataset.profit = data.profit ? ceilCurrency(data.profit) : '';
   tr.innerHTML = `
     <td>${lineInput(data.model || '', 'model-input')}</td>
-    <td>${lineInput(materialText(data), 'material-input')}</td>
-    <td>${lineInput(colorText(data), 'color-input')}</td>
+    <td>${lineSelect(materialText(data) || 'PLA+', 'material-input', LINE_MATERIAL_OPTIONS, 'PLA+')}</td>
+    <td>${lineSelect(colorText(data) || 'Black', 'color-input', LINE_COLOR_OPTIONS, 'Black')}</td>
     <td>${lineInput(data.qty || 1, 'qty-input', 'number')}</td>
     <td>${lineInput(data.unitPrice ?? data.unit ?? '', 'unit-input', 'number')}</td>
     <td>${lineInput(data.layer || '0.2', 'layer-input')}</td>
@@ -864,6 +930,8 @@ function collectBillItems() {
     layer: $('.layer-input', tr).value.trim(),
     walls: $('.walls-input', tr).value.trim(),
     infill: $('.infill-input', tr).value.trim(),
+    weight: $('.weight-input', tr) ? $('.weight-input', tr).value.trim() : '',
+    printTime: $('.time-input', tr) ? $('.time-input', tr).value.trim() : '',
     calcKey: tr.dataset.calcKey || ''
   })).filter(item => item.model);
 }
@@ -890,12 +958,14 @@ function collectQuoteItems() {
 }
 
 function billTotals(items = collectBillItems()) {
-  const subtotal = ceilCurrency(items.reduce((sum, item) => sum + (item.qty * item.unitPrice), 0));
+  const serviceCharge = serviceInfo('bill').charge;
+  const itemsSubtotal = ceilCurrency(items.reduce((sum, item) => sum + (item.qty * item.unitPrice), 0));
+  const subtotal = ceilCurrency(itemsSubtotal + serviceCharge);
   const discount = ceilCurrency(items.reduce((sum, item) => sum + item.discount, 0));
   const cost = ceilCurrency(items.reduce((sum, item) => sum + item.cost, 0));
   const total = ceilCurrency(Math.max(0, subtotal - discount));
   const advance = ceilCurrency($('#billAdvance').value);
-  return { subtotal, discount, total, advance, balance: ceilCurrency(Math.max(0, total - advance)), cost, profit: ceilCurrency(total - cost) };
+  return { subtotal, itemsSubtotal, serviceCharge, discount, total, advance, balance: ceilCurrency(Math.max(0, total - advance)), cost, profit: ceilCurrency(total - cost) };
 }
 
 
@@ -924,10 +994,12 @@ function parsePrintTimeMinutes(value) {
 }
 
 function quoteTotals(items = collectQuoteItems()) {
-  const total = ceilCurrency(items.reduce((sum, item) => sum + ((num(item.qty) || 1) * ceilCurrency(item.unitPrice)), 0));
+  const serviceCharge = serviceInfo('quote').charge;
+  const itemsTotal = ceilCurrency(items.reduce((sum, item) => sum + ((num(item.qty) || 1) * ceilCurrency(item.unitPrice)), 0));
+  const total = ceilCurrency(itemsTotal + serviceCharge);
   const weightG = items.reduce((sum, item) => sum + ((num(item.qty) || 1) * parseWeightG(item.weight)), 0);
   const printMinutes = items.reduce((sum, item) => sum + ((num(item.qty) || 1) * parsePrintTimeMinutes(item.printTime)), 0);
-  return { total, weightG, printMinutes };
+  return { total, itemsTotal, serviceCharge, weightG, printMinutes };
 }
 
 function readDraft(key) {
@@ -944,6 +1016,10 @@ function saveQuoteDraft() {
     quoteNo: $('#quoteNo')?.value || docId('QT'),
     date: $('#quoteDate')?.value || todayISO(),
     notes: $('#quoteNotes')?.value || '',
+    serviceName: $('#quoteServiceName')?.value || '',
+    serviceCharge: $('#quoteServiceCharge')?.value || '0',
+    showCustomerSpecs: !!$('#quoteShowCustomerSpecs')?.checked,
+    useCustomerFileName: !!$('#quoteUseCustomerFileName')?.checked,
     items: collectQuoteItems()
   });
 }
@@ -957,6 +1033,10 @@ function saveBillDraft() {
     paidMethod: $('#billPaidMethod')?.value || '',
     advance: $('#billAdvance')?.value || '0',
     notes: $('#billNotes')?.value || '',
+    serviceName: $('#billServiceName')?.value || '',
+    serviceCharge: $('#billServiceCharge')?.value || '0',
+    showCustomerSpecs: !!$('#billShowCustomerSpecs')?.checked,
+    useCustomerFileName: !!$('#billUseCustomerFileName')?.checked,
     items: collectBillItems()
   });
 }
@@ -969,6 +1049,10 @@ function restoreQuoteDraft() {
     $('#quoteNo').value = draft.quoteNo || $('#quoteNo').value || docId('QT');
     $('#quoteDate').value = draft.date || todayISO();
     $('#quoteNotes').value = draft.notes || '';
+    $('#quoteServiceName').value = draft.serviceName || 'Model Design / Other Service';
+    $('#quoteServiceCharge').value = draft.serviceCharge || '0';
+    $('#quoteShowCustomerSpecs').checked = draft.showCustomerSpecs !== false;
+    $('#quoteUseCustomerFileName').checked = !!draft.useCustomerFileName;
     (draft.items && draft.items.length ? draft.items : [{}]).forEach(item => addQuoteRow(item));
   } else {
     addQuoteRow();
@@ -987,6 +1071,10 @@ function restoreBillDraft() {
     $('#billPaidMethod').value = draft.paidMethod || '';
     $('#billAdvance').value = draft.advance || '0';
     $('#billNotes').value = draft.notes || '';
+    $('#billServiceName').value = draft.serviceName || 'Model Design / Other Service';
+    $('#billServiceCharge').value = draft.serviceCharge || '0';
+    $('#billShowCustomerSpecs').checked = draft.showCustomerSpecs !== false;
+    $('#billUseCustomerFileName').checked = !!draft.useCustomerFileName;
     (draft.items && draft.items.length ? draft.items : [{}]).forEach(item => addBillRow(item));
   } else {
     addBillRow();
@@ -1000,6 +1088,8 @@ function resetQuotationDraft() {
   $('#quoteNo').value = docId('QT');
   $('#quoteDate').value = todayISO();
   $('#quoteNotes').value = '';
+  $('#quoteServiceName').value = 'Model Design / Other Service';
+  $('#quoteServiceCharge').value = '0';
   $('#quoteItemsBody').innerHTML = '';
   addQuoteRow();
   saveQuoteDraft();
@@ -1015,6 +1105,8 @@ function resetBillDraft() {
   $('#billPaidMethod').value = '';
   $('#billAdvance').value = '0';
   $('#billNotes').value = '';
+  $('#billServiceName').value = 'Model Design / Other Service';
+  $('#billServiceCharge').value = '0';
   $('#billItemsBody').innerHTML = '';
   addBillRow();
   saveBillDraft();
@@ -1024,6 +1116,7 @@ function resetBillDraft() {
 function recalcBill() {
   const totals = billTotals();
   $('#billSubtotal').textContent = money(totals.subtotal);
+  if ($('#billServiceTotal')) $('#billServiceTotal').textContent = money(totals.serviceCharge);
   $('#billDiscount').textContent = money(totals.discount);
   $('#billGrandTotal').textContent = money(totals.total);
   $('#billBalance').textContent = money(totals.balance);
@@ -1031,6 +1124,7 @@ function recalcBill() {
 
 function recalcQuote() {
   const totals = quoteTotals();
+  if ($('#quoteServiceTotal')) $('#quoteServiceTotal').textContent = money(totals.serviceCharge);
   $('#quoteGrandTotal').textContent = money(totals.total);
   const weightEl = $('#quoteTotalWeight');
   const timeEl = $('#quoteTotalTime');
@@ -1039,6 +1133,11 @@ function recalcQuote() {
 }
 
 function initBillQuote() {
+  const pdfOptions = readCustomerPdfOptions();
+  if ($('#quoteShowCustomerSpecs')) $('#quoteShowCustomerSpecs').checked = pdfOptions.quoteShowSpecs !== false;
+  if ($('#billShowCustomerSpecs')) $('#billShowCustomerSpecs').checked = pdfOptions.billShowSpecs !== false;
+  if ($('#quoteUseCustomerFileName')) $('#quoteUseCustomerFileName').checked = !!pdfOptions.quoteUseCustomerName;
+  if ($('#billUseCustomerFileName')) $('#billUseCustomerFileName').checked = !!pdfOptions.billUseCustomerName;
   restoreBillDraft();
   restoreQuoteDraft();
   $('#addBillRowBtn').addEventListener('click', () => { addBillRow(); saveBillDraft(); });
@@ -1047,8 +1146,10 @@ function initBillQuote() {
   $('#addCalcQuoteBtn').addEventListener('click', () => addCalculatorResultToLine('quote'));
   $('#resetQuoteBtn')?.addEventListener('click', resetQuotationDraft);
   $('#resetBillBtn')?.addEventListener('click', resetBillDraft);
-  ['quoteCustomer', 'quoteNo', 'quoteDate', 'quoteNotes'].forEach(key => $(`#${key}`)?.addEventListener('input', saveQuoteDraft));
-  ['billCustomer', 'invoiceNo', 'billDate', 'billPaidStatus', 'billPaidMethod', 'billAdvance', 'billNotes'].forEach(key => $(`#${key}`)?.addEventListener('input', saveBillDraft));
+  ['quoteCustomer', 'quoteNo', 'quoteDate', 'quoteNotes', 'quoteServiceName', 'quoteServiceCharge'].forEach(key => $(`#${key}`)?.addEventListener('input', () => { recalcQuote(); saveQuoteDraft(); }));
+  ['billCustomer', 'invoiceNo', 'billDate', 'billPaidStatus', 'billPaidMethod', 'billAdvance', 'billNotes', 'billServiceName', 'billServiceCharge'].forEach(key => $(`#${key}`)?.addEventListener('input', () => { recalcBill(); saveBillDraft(); }));
+  ['quoteShowCustomerSpecs', 'quoteUseCustomerFileName'].forEach(key => $(`#${key}`)?.addEventListener('change', () => { writeCustomerPdfOptions(); saveQuoteDraft(); }));
+  ['billShowCustomerSpecs', 'billUseCustomerFileName'].forEach(key => $(`#${key}`)?.addEventListener('change', () => { writeCustomerPdfOptions(); saveBillDraft(); }));
   $('#billItemsBody').addEventListener('input', () => { recalcBill(); saveBillDraft(); });
   $('#billItemsBody').addEventListener('change', () => { recalcBill(); saveBillDraft(); });
   $('#quoteItemsBody').addEventListener('input', () => { recalcQuote(); saveQuoteDraft(); });
@@ -1084,7 +1185,11 @@ function generateInvoice(e) {
     date: $('#billDate').value || todayISO(),
     customer: $('#billCustomer').value.trim(),
     notes: $('#billNotes').value.trim(),
-    items,
+    serviceName: serviceInfo('bill').name,
+    serviceCharge: totals.serviceCharge,
+    showCustomerSpecs: !!$('#billShowCustomerSpecs')?.checked,
+    useCustomerFileName: !!$('#billUseCustomerFileName')?.checked,
+    items: addServiceLine(items, 'bill'),
     totals,
     paidStatus: $('#billPaidStatus').value,
     paidMethod: $('#billPaidMethod').value.trim()
@@ -1095,7 +1200,7 @@ function generateInvoice(e) {
     id: id('INVOICE'), createdAt: nowStamp(), invoiceNo: data.no, orderId: data.no, customer: data.customer,
     date: data.date, subtotal: totals.subtotal, discount: totals.discount, total: totals.total,
     advancePayment: totals.advance, balance: totals.balance, paidStatus: data.paidStatus, paidMethod: data.paidMethod,
-    totalCost: totals.cost, profit: totals.profit, items, notes: data.notes, documentData: data
+    totalCost: totals.cost, profit: totals.profit, serviceCharge: totals.serviceCharge, items: data.items, notes: data.notes, documentData: data
   };
   // Bills / Invoices are saved only in the Bills / Invoices database.
   // They do not create Orders, Costs, Profit, Income, or Budget records.
@@ -1120,7 +1225,11 @@ function buildQuotationDataFromForm() {
     date: $('#quoteDate').value || todayISO(),
     customer: $('#quoteCustomer').value.trim(),
     notes: $('#quoteNotes').value.trim(),
-    items,
+    serviceName: serviceInfo('quote').name,
+    serviceCharge: totals.serviceCharge,
+    showCustomerSpecs: !!$('#quoteShowCustomerSpecs')?.checked,
+    useCustomerFileName: !!$('#quoteUseCustomerFileName')?.checked,
+    items: addServiceLine(items, 'quote'),
     totals
   };
 }
@@ -1134,6 +1243,7 @@ function saveQuotationRecord(data) {
     customer: data.customer,
     date: data.date,
     total: data.totals.total,
+    serviceCharge: data.totals.serviceCharge,
     totalWeightG: data.totals.weightG,
     totalPrintMinutes: data.totals.printMinutes,
     items: data.items,
@@ -1260,7 +1370,7 @@ function printInternalQuotationDocument(data) {
       <td>${percentText(item.profitMargin)}</td>
     </tr>`).join('');
 
-  const html = `<!doctype html><html><head><base href="${location.href}"><title>Internal_Quote_${safe(data.no)}.pdf</title><style>
+  const html = `<!doctype html><html><head><base href="${location.href}"><title>${safe(customerFileTitle('Internal_Quote', data.no, data.customer, data.useCustomerFileName))}</title><style>
     @page{size:A4;margin:10mm}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}.print-btn{position:fixed;right:12px;top:12px;z-index:10;border:0;border-radius:999px;background:#d4af37;color:#111;font-weight:900;padding:10px 16px;cursor:pointer}@media print{.print-btn{display:none}}.head{border-bottom:3px solid #d4af37;background:#111;color:#fff;padding:14px 16px;margin-bottom:12px}.brand{display:flex;align-items:center;gap:12px}.brand img{width:50px;height:50px;object-fit:contain}.title{margin-left:auto;text-align:right}.title h1{margin:0;color:#d4af37;font-size:22px}.title p{margin:4px 0 0;font-size:12px}.warning{background:#fff3cd;border:1px solid #d4af37;padding:8px 11px;font-weight:700;margin:8px 0 12px}.meta{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px}.meta div{background:#f2f2f2;padding:8px 10px;border-radius:6px}.meta b{display:block;font-size:10px;color:#555;text-transform:uppercase}.meta span{font-size:13px;font-weight:700}.section-title{font-size:13px;font-weight:900;color:#111;border-left:5px solid #d4af37;padding-left:8px;margin:14px 0 8px}table{width:100%;border-collapse:collapse;font-size:9.3px;page-break-inside:auto}th{background:#111;color:#d4af37;text-align:left;padding:6px 5px;border:1px solid #333}td{padding:5px;border:1px solid #ccc;vertical-align:top}tr:nth-child(even) td{background:#f7f7f7}.text-right{text-align:right}.summary{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px;page-break-inside:avoid}.summary div{display:flex;justify-content:space-between;background:#f2f2f2;padding:8px 10px;border-radius:4px;font-size:11px}.summary .final{background:#d4af37;font-weight:900}.notes{margin-top:12px;font-size:10.5px;color:#333}.footer-note{margin-top:10px;font-size:10px;color:#777;font-weight:700}.page-break{page-break-inside:avoid}</style></head><body><button class="print-btn" onclick="window.print()">Print / Save Internal PDF</button><section class="head"><div class="brand"><img src="../assets/logo.png" alt="Trini-D"><div><strong>TRINI-D 3D Printing</strong><br><small>Internal quotation copy</small></div><div class="title"><h1>INTERNAL QUOTATION</h1><p># ${safe(data.no)}</p></div></div></section><div class="warning">INTERNAL COPY ONLY — Do not send this PDF to the customer.</div><section class="meta"><div><b>Customer</b><span>${safe(data.customer || 'Customer')}</span></div><div><b>Date</b><span>${safe(prettyDate(data.date))}</span></div><div><b>Quote No</b><span>${safe(data.no)}</span></div></section><div class="section-title">Customer Quotation Details</div><table><thead><tr><th>#</th><th>Model / Description</th><th>Qty</th><th>Unit Price</th><th>Layer</th><th>Walls</th><th>Infill</th><th>Total</th></tr></thead><tbody>${customerRows}</tbody></table><div class="section-title">Internal Cost & Profit Details</div><table><thead><tr><th>#</th><th>Model</th><th>Part Time</th><th>Part Weight</th><th>Electricity Cost</th><th>Filament Cost</th><th>Machine Cost</th><th>Total Cost</th><th>Profit</th><th>Profit Margin</th></tr></thead><tbody>${internalRows}</tbody></table><section class="summary page-break"><div><span>Total Weight</span><b>${formatNumber(totals.weightG)} g</b></div><div><span>Total Time</span><b>${minutesLabel(totals.printMinutes)}</b></div><div><span>Total Electricity Cost</span><b>${formatMoneyDot(totals.electricity)}</b></div><div><span>Total Filament Cost</span><b>${formatMoneyDot(totals.filament)}</b></div><div><span>Total Machine Cost</span><b>${formatMoneyDot(totals.machine)}</b></div><div><span>Total Cost</span><b>${formatMoneyDot(totals.cost)}</b></div><div><span>Customer Quotation Total</span><b>${formatMoneyDot(totals.price)}</b></div><div class="final"><span>Total Profit</span><b>${formatMoneyDot(totals.profit)}</b></div></section>${data.notes ? `<section class="notes"><b>Notes:</b><br>${safe(data.notes).split('\n').join('<br>')}</section>` : ''}<div class="footer-note">This internal PDF includes cost, time, weight, and profit details for business use only.</div><script>window.onload = () => setTimeout(() => window.print(), 500);</script></body></html>`;
   const win = window.open('', '_blank');
   win.document.write(html);
@@ -1275,6 +1385,8 @@ function printDocument(data) {
   const totalLabel = isInvoice ? 'TOTAL' : 'TOTAL QUOTE';
   const dateText = prettyDate(data.date);
   const filePrefix = isInvoice ? 'Invoice' : 'Quote';
+  const fileTitle = customerFileTitle(filePrefix, data.no, data.customer, data.useCustomerFileName);
+  const showCustomerSpecs = data.showCustomerSpecs !== false;
   const thanks = isInvoice ? 'Thank you for your business!' : 'Thank you for choosing Trini-D!';
   const formatNumber = v => Number(v || 0).toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const formatMoneyDot = v => `Rs. ${ceilCurrency(v).toLocaleString('en-LK', { maximumFractionDigits: 0 })}`;
@@ -1304,8 +1416,8 @@ function printDocument(data) {
     const lineTotal = isInvoice ? Math.max(0, (item.qty * item.unitPrice) - item.discount) : (item.qty * item.unitPrice);
     const rowClass = index % 2 === 0 ? 'row-light' : 'row-white';
     if (!isInvoice) {
-      const weight = item.weight || '';
-      const printTime = item.printTime || '';
+      const weight = showCustomerSpecs ? (item.weight || '') : '';
+      const printTime = showCustomerSpecs ? (item.printTime || '') : '';
       const matColor = [item.materialType, item.color].filter(Boolean).join(' / ');
       const extra = weight || printTime || matColor ? 16 : 0;
       return {
@@ -1324,6 +1436,8 @@ function printDocument(data) {
     if (item.layer) specParts.push(`Layer: ${item.layer}`);
     if (item.walls) specParts.push(`Walls: ${item.walls}`);
     if (item.infill) specParts.push(`Infill: ${item.infill}`);
+    if (showCustomerSpecs && item.weight) specParts.push(`Weight: ${item.weight}`);
+    if (showCustomerSpecs && item.printTime) specParts.push(`Time: ${item.printTime}`);
     return {
       height: rowHeight,
       html: top => {
@@ -1380,7 +1494,7 @@ function printDocument(data) {
   }
 
   const pagesHtml = chunks.map(renderPage).join('');
-  const html = `<!doctype html><html><head><base href="${location.href}"><title>${filePrefix}_${safe(data.no)}.pdf</title><style>
+  const html = `<!doctype html><html><head><base href="${location.href}"><title>${safe(fileTitle)}</title><style>
     @page{size:A4;margin:0}*{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff;color:#111;font-family:Arial,Helvetica,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}.print-btn{position:fixed;right:12px;top:12px;z-index:50;border:0;border-radius:999px;background:#d4af37;color:#111;font-weight:900;padding:10px 16px;box-shadow:0 10px 30px rgba(0,0,0,.25);cursor:pointer}@media print{.print-btn{display:none}.page{margin:0!important;page-break-after:always}.page:last-child{page-break-after:auto}}.page{width:210mm;height:297mm;margin:0 auto;background:#fff;position:relative;overflow:hidden}.header{position:absolute;left:0;top:0;width:210mm;height:110pt;background:#111;border-bottom:2.5pt solid #d4af37}.logo{position:absolute;left:18mm;top:16pt;width:78pt;height:78pt;object-fit:contain}.brand-name{position:absolute;left:139pt;top:22pt;width:180pt;height:46pt;object-fit:contain}.header-motto{position:absolute;left:139pt;top:76pt;width:180pt;text-align:center;font-size:6pt;font-weight:700;letter-spacing:.02em;white-space:nowrap;color:#e8e8e8;line-height:1}.header-motto .gold{color:#d4af37}.doc-title{position:absolute;right:18mm;top:35pt;text-align:right;color:#fff;font-size:20pt;font-weight:700;line-height:1;letter-spacing:.02em}.doc-id-top{position:absolute;right:18mm;top:67pt;text-align:right;color:#d4af37;font-size:9pt;line-height:1}.panel{position:absolute;left:18mm;top:120pt;width:174mm;height:68pt;background:#f2f2f2;border-radius:6pt}.label{font-size:8pt;font-weight:700;color:#2d2d2d;text-transform:uppercase;line-height:1}.customer-label{position:absolute;left:22mm;top:136pt}.customer-name{position:absolute;left:22mm;top:151pt;font-size:13pt;font-weight:700;color:#111;line-height:1}.date-label{position:absolute;left:405pt;top:133pt}.date-value{position:absolute;left:405pt;top:147pt;font-size:10pt;color:#111;line-height:1}.number-label{position:absolute;left:405pt;top:165pt}.number-value{position:absolute;left:405pt;top:178pt;font-size:8pt;font-weight:700;color:#d4af37;line-height:1}.table-wrap{position:absolute;left:18mm;top:194pt;width:174mm;border-bottom:.5pt solid #ccc}.table-head{position:absolute;left:0;top:0;width:100%;height:26pt;background:#111;border-bottom:1pt solid #d4af37;color:#d4af37;font-size:7.5pt;font-weight:700;text-transform:uppercase;line-height:1}.th{position:absolute;top:10pt;text-align:center;white-space:nowrap}.th:first-child{text-align:left}.doc-row{position:absolute;left:0;width:100%;font-size:9pt;color:#111;line-height:1}.row-light{background:#f2f2f2}.row-white{background:#fff}.td{position:absolute;top:8pt;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.q-model,.i-model,.i-model-disc,.id-model-disc{text-align:left;font-weight:700}.q-total,.i-total,.id-total-disc{font-weight:700;text-align:right}.q-unit,.q-layer,.q-walls,.q-infill,.id-qty-disc{color:#2d2d2d}.id-discount-disc{color:#cc3333}.quote-sub{position:absolute;left:4pt;font-size:7pt;font-style:italic;color:#888;line-height:1}.spec-line{position:absolute;left:4pt;top:21pt}.spec-tag{display:inline-block;background:#2a2200;color:#d4af37;border-radius:2pt;padding:2pt 5pt;font-size:7pt;font-style:italic;line-height:1}.c-model{left:4pt;text-align:left}.c-qty{left:136pt;width:40pt}.c-unit{left:190pt;width:68pt}.c-layer{left:271pt;width:58pt}.c-walls{left:333pt;width:59pt}.c-infill{left:395pt;width:55pt}.c-total{right:4pt;width:64pt}.q-model{left:4pt;width:132pt}.q-qty{left:136pt;width:40pt;font-weight:700}.q-unit{left:190pt;width:68pt;font-size:8pt}.q-layer{left:271pt;width:58pt;font-size:8pt}.q-walls{left:333pt;width:59pt;font-size:8pt}.q-infill{left:395pt;width:55pt;font-size:8pt}.q-total{right:4pt;width:70pt}.i-model{left:4pt;width:220pt}.i-qty{left:245pt;width:40pt;font-weight:700}.i-unit{left:310pt;width:85pt}.i-total{right:4pt;width:90pt}.i-model-disc{left:4pt;text-align:left}.i-qty-disc{left:292pt;width:35pt}.i-unit-disc{left:340pt;width:70pt}.i-discount-disc{left:430pt;width:60pt}.i-total-disc{right:4pt;width:62pt}.id-model-disc{left:4pt;width:280pt}.id-qty-disc{left:292pt;width:35pt}.id-unit-disc{left:332pt;width:80pt}.id-discount-disc{left:418pt;width:72pt}.id-total-disc{right:4pt;width:72pt}.totals{position:absolute;right:18mm;width:90mm}.total-quote,.total-main,.total-balance{height:24pt;background:#d4af37;color:#111;font-size:12pt;font-weight:700;line-height:24pt;padding:0 8pt}.total-quote{display:flex;justify-content:space-between}.total-main,.total-balance,.total-mini{display:flex;justify-content:space-between}.total-mini{height:20pt;color:#111;font-size:9pt;line-height:20pt;padding:0 8pt}.total-mini.red{color:#cc3333}.total-balance{background:#1a5c2a;color:#4ade80}.notes{position:absolute;left:18mm;width:95mm;font-size:8pt;color:#111}.notes b{display:block;color:#2d2d2d;margin-bottom:4pt}.notes span{display:block;margin-bottom:3pt}.footer{position:absolute;left:0;bottom:38pt;width:210mm;height:90pt;background:#111;border-top:2pt solid #d4af37}.footer-title{position:absolute;left:18mm;top:20pt;color:#d4af37;font-size:13pt;font-weight:700}.footer-phone{position:absolute;left:18mm;top:42pt;color:#fff;font-size:8.5pt}.footer-wa{position:absolute;left:18mm;top:56pt;color:#fff;font-size:8.5pt}.footer-motto{position:absolute;left:18mm;top:70pt;color:#ccc;font-size:7.5pt;font-style:italic}.qr{position:absolute;right:18mm;top:14pt;width:68pt;height:68pt}.qr-caption{position:absolute;right:18mm;top:83pt;width:68pt;text-align:center;color:#ccc;font-size:6.5pt}.page-line{position:absolute;left:0;bottom:15pt;width:210mm;text-align:center;font-size:7pt;color:#bbb}
   </style></head><body><button class="print-btn" onclick="window.print()">Print / Save PDF</button>${pagesHtml}<script>window.onload = () => setTimeout(() => window.print(), 350);</script></body></html>`;
   const win = window.open('', '_blank');

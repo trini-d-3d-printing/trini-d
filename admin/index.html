@@ -171,10 +171,19 @@
             <div class="summary-grid quote-summary-grid">
               <div><span>Total Weight</span><b id="quoteTotalWeight">0.00 g</b></div>
               <div><span>Total Printing Time</span><b id="quoteTotalTime">0m</b></div>
+              <div><span>Service Charge</span><b id="quoteServiceTotal">Rs 0</b></div>
               <div><span>Quotation Total</span><b id="quoteGrandTotal">Rs 0</b></div>
             </div>
             <div class="table-wrap line-editor"><table><thead><tr><th>Model</th><th>Material</th><th>Color</th><th>Qty</th><th>Unit Price</th><th>Layer</th><th>Walls</th><th>Infill</th><th>Weight</th><th>Print Time</th><th></th></tr></thead><tbody id="quoteItemsBody"></tbody></table></div>
             <div class="admin-actions"><button class="btn ghost" id="addQuoteRowBtn" type="button">+ Add Item</button><button class="btn ghost" id="addCalcQuoteBtn" type="button">Add Calculator Result</button><button class="btn ghost" id="resetQuoteBtn" type="button">Reset Quotation</button></div>
+            <div class="form-grid admin-form-grid two feature-grid">
+              <label class="field"><span>Design / Other Service Name</span><input id="quoteServiceName" type="text" placeholder="Model design / Other service" value="Model Design / Other Service"></label>
+              <label class="field"><span>Design / Other Service Price Rs</span><input id="quoteServiceCharge" type="text" inputmode="decimal" value="0"></label>
+            </div>
+            <div class="feature-options">
+              <label class="check-field"><input id="quoteShowCustomerSpecs" type="checkbox"> <span>Show weight and printing time in customer PDF</span></label>
+              <label class="check-field"><input id="quoteUseCustomerFileName" type="checkbox"> <span>Add customer name to PDF file name</span></label>
+            </div>
             <label class="field"><span>Notes optional</span><textarea id="quoteNotes" rows="3" placeholder="Validity, delivery, conditions..."></textarea></label>
             <div class="admin-actions quotation-pdf-actions">
               <button class="btn primary" type="submit">Generate Both Quotation PDFs</button>
@@ -197,11 +206,20 @@
               <label class="field"><span>Paid Method</span><input id="billPaidMethod" type="text" placeholder="Cash / Bank / Online"></label>
               <label class="field"><span>Advance Paid Rs</span><input id="billAdvance" type="text" inputmode="decimal" step="0.01" value="0"></label>
             </div>
-            <div class="table-wrap line-editor"><table><thead><tr><th>Model</th><th>Material</th><th>Color</th><th>Qty</th><th>Unit Price</th><th>Discount</th><th>Cost Rs</th><th>Layer</th><th>Walls</th><th>Infill</th><th></th></tr></thead><tbody id="billItemsBody"></tbody></table></div>
+            <div class="table-wrap line-editor"><table><thead><tr><th>Model</th><th>Material</th><th>Color</th><th>Qty</th><th>Unit Price</th><th>Discount</th><th>Cost Rs</th><th>Layer</th><th>Walls</th><th>Infill</th><th>Weight</th><th>Print Time</th><th></th></tr></thead><tbody id="billItemsBody"></tbody></table></div>
             <div class="admin-actions"><button class="btn ghost" id="addBillRowBtn" type="button">+ Add Item</button><button class="btn ghost" id="addCalcBillBtn" type="button">Add Calculator Result</button><button class="btn ghost" id="resetBillBtn" type="button">Reset Invoice</button></div>
+            <div class="form-grid admin-form-grid two feature-grid">
+              <label class="field"><span>Design / Other Service Name</span><input id="billServiceName" type="text" placeholder="Model design / Other service" value="Model Design / Other Service"></label>
+              <label class="field"><span>Design / Other Service Price Rs</span><input id="billServiceCharge" type="text" inputmode="decimal" value="0"></label>
+            </div>
+            <div class="feature-options">
+              <label class="check-field"><input id="billShowCustomerSpecs" type="checkbox"> <span>Show weight and printing time in customer PDF</span></label>
+              <label class="check-field"><input id="billUseCustomerFileName" type="checkbox"> <span>Add customer name to PDF file name</span></label>
+            </div>
             <label class="field"><span>Notes optional</span><textarea id="billNotes" rows="3" placeholder="Payment note, pickup note..."></textarea></label>
             <div class="summary-grid">
               <div><span>Subtotal</span><b id="billSubtotal">Rs 0</b></div>
+              <div><span>Service Charge</span><b id="billServiceTotal">Rs 0</b></div>
               <div><span>Discount</span><b id="billDiscount">Rs 0</b></div>
               <div><span>Total</span><b id="billGrandTotal">Rs 0</b></div>
               <div><span>Balance Due</span><b id="billBalance">Rs 0</b></div>

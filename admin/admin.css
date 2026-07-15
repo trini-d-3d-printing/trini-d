@@ -331,3 +331,6 @@ input[type="number"]::-webkit-inner-spin-button {
   .material-profile-panel { grid-template-columns: 1fr; align-items: stretch; }
   .material-profile-reset { width: 100%; }
 }
+
+/* v32 quote/invoice options */
+.feature-grid{margin:18px 0 10px}.feature-options{display:flex;gap:14px;flex-wrap:wrap;margin:10px 0 16px}.check-field{display:flex;align-items:center;gap:9px;border:1px solid var(--line);background:rgba(255,255,255,.04);border-radius:14px;padding:11px 13px;font-weight:800;color:var(--text)}.check-field input{width:18px;height:18px;accent-color:var(--gold)}.line-editor select.material-input,.line-editor select.color-input{min-width:110px;background:#0b0d10;color:#fff;border:1px solid rgba(255,255,255,.08);border-radius:10px;padding:11px 12px;font:inherit;font-weight:800}.line-editor select.color-input{min-width:112px}.line-editor select.material-input:focus,.line-editor select.color-input:focus{outline:2px solid var(--gold)}
