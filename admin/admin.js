@@ -180,7 +180,7 @@ async function publishSmartQuotePricingProfiles() {
     pricingProfiles: firestoreSafe(publicSmartQuotePricingProfiles()),
     pricingUpdatedAt: firebase.firestore.FieldValue.serverTimestamp(),
     pricingUpdatedBy: firebaseUser.email || firebaseUser.uid,
-    pricingSchemaVersion: 2
+    pricingSchemaVersion: 3
   }, { merge: true });
 }
 
@@ -215,7 +215,7 @@ let applyingRemote = false;
 let cloudWriteTimer = null;
 let configSaveTimer = null;
 let smartQuoteConfigSaveTimer = null;
-let smartQuoteConfig = { profitMargin: 75, backendApiUrl: '' };
+let smartQuoteConfig = { profitMargin: 75, backendApiUrl: '', pricingProfiles: {} };
 let cloudReady = false;
 let db = loadDb();
 let lastCalc = null;
@@ -319,7 +319,10 @@ function renderSmartQuoteConfig(force = false) {
   const apiInput = $('#smartQuoteBackendApiUrl');
   if (apiInput && (force || document.activeElement !== apiInput)) apiInput.value = smartQuoteConfig.backendApiUrl || '';
   const status = $('#smartQuoteConfigStatus');
-  if (status) status.textContent = `Smart Quote margin: ${smartQuoteConfig.profitMargin}% · backend: ${smartQuoteConfig.backendApiUrl || 'not configured'}`;
+  if (status) {
+    const profileNames = Object.keys(smartQuoteConfig.pricingProfiles || {});
+    status.textContent = `Smart Quote margin: ${smartQuoteConfig.profitMargin}% · backend: ${smartQuoteConfig.backendApiUrl || 'not configured'} · pricing: ${profileNames.length ? profileNames.join(' + ') + ' synced' : 'not published'}`;
+  }
 }
 
 function stopSmartQuoteConfigSync() {
@@ -338,6 +341,7 @@ function startSmartQuoteConfigSync() {
       const data = snapshot.data() || {};
       smartQuoteConfig.profitMargin = normalizeSmartQuoteMargin(data.profitMargin);
       smartQuoteConfig.backendApiUrl = String(data.backendApiUrl || '').trim().replace(/\/$/,'');
+      smartQuoteConfig.pricingProfiles = (data.pricingProfiles && typeof data.pricingProfiles === 'object') ? data.pricingProfiles : {};
     } else {
       smartQuoteConfig.profitMargin = 75;
     }
@@ -365,17 +369,19 @@ async function saveSmartQuoteConfigNow(showToast = true) {
   const status = $('#smartQuoteConfigStatus');
   if (status) status.textContent = `Smart Quote margin: saving ${margin}%…`;
   try {
+    const publishedProfiles = firestoreSafe(publicSmartQuotePricingProfiles());
     await firebaseStore.doc(SMARTQUOTE_CONFIG_DOC_PATH).set({
       profitMargin: margin,
       backendApiUrl,
-      pricingProfiles: firestoreSafe(publicSmartQuotePricingProfiles()),
+      pricingProfiles: publishedProfiles,
       updatedAt: firebase.firestore.FieldValue.serverTimestamp(),
       updatedBy: firebaseUser.email || firebaseUser.uid,
-      pricingSchemaVersion: 2,
-      schemaVersion: 2
+      pricingSchemaVersion: 3,
+      schemaVersion: 3
     }, { merge: true });
+    smartQuoteConfig.pricingProfiles = publishedProfiles;
     renderSmartQuoteConfig(true);
-    if (showToast) toast(`Smart Quote settings saved`);
+    if (showToast) toast(`Smart Quote settings and exact pricing profiles saved`);
   } catch (err) {
     console.error(err);
     if (status) status.textContent = 'Smart Quote margin: save failed';
@@ -875,6 +881,77 @@ function lineSelect(value, cls = '', options = [], fallback = '') {
   }).join('')}</select>`;
 }
 
+const LINE_WALLS_OPTIONS = ['1', '2', '3', '4', '5', '6', 'Custom'];
+
+function setAllSelect(cls, options) {
+  const opts = options.filter(opt => noneBlank(typeof opt === 'object' ? opt.value : opt) !== '');
+  return `<select class="${cls} set-all-input"><option value="">Set All…</option>${opts.map(opt => {
+    const rawValue = typeof opt === 'object' ? opt.value : opt;
+    const label = typeof opt === 'object' ? opt.label : opt;
+    return `<option value="${safe(noneBlank(rawValue))}">${safe(label)}</option>`;
+  }).join('')}</select>`;
+}
+
+function setAllInput(cls, placeholder) {
+  return `<input class="${cls} set-all-input" type="text" inputmode="decimal" placeholder="${safe(placeholder)}">`;
+}
+
+// Builds the "Set All" row that sits in the table header above the item rows,
+// letting the user apply one value to that column across every item row.
+function buildSetAllRow(kind) {
+  const isBill = kind === 'bill';
+  const cells = [
+    `<th class="set-all-label">Set All</th>`,
+    `<th>${setAllSelect('set-all-material', LINE_MATERIAL_OPTIONS)}</th>`,
+    `<th>${setAllSelect('set-all-color', LINE_COLOR_OPTIONS)}</th>`,
+    `<th>${setAllInput('set-all-qty', 'Qty')}</th>`,
+    `<th></th>`
+  ];
+  if (isBill) cells.push(`<th></th>`, `<th></th>`);
+  cells.push(
+    `<th>${setAllInput('set-all-layer', 'Layer')}</th>`,
+    `<th>${setAllSelect('set-all-walls', LINE_WALLS_OPTIONS)}</th>`,
+    `<th>${setAllInput('set-all-infill', 'Infill')}</th>`,
+    `<th></th>`,
+    `<th></th>`,
+    `<th></th>`
+  );
+  return `<tr class="set-all-row" id="${isBill ? 'billSetAllRow' : 'quoteSetAllRow'}">${cells.join('')}</tr>`;
+}
+
+function initSetAllRow(kind) {
+  const isBill = kind === 'bill';
+  const bodyId = isBill ? 'billItemsBody' : 'quoteItemsBody';
+  const body = $(`#${bodyId}`);
+  if (!body) return;
+  const thead = body.closest('table')?.querySelector('thead');
+  if (!thead || thead.querySelector('.set-all-row')) return;
+  thead.insertAdjacentHTML('beforeend', buildSetAllRow(kind));
+  const row = thead.querySelector('.set-all-row');
+  const mapping = [
+    ['.set-all-material', '.material-input'],
+    ['.set-all-color', '.color-input'],
+    ['.set-all-qty', '.qty-input'],
+    ['.set-all-layer', '.layer-input'],
+    ['.set-all-walls', '.walls-input'],
+    ['.set-all-infill', '.infill-input']
+  ];
+  mapping.forEach(([sourceSel, targetSel]) => {
+    const source = $(sourceSel, row);
+    if (!source) return;
+    const evt = source.tagName === 'SELECT' ? 'change' : 'input';
+    source.addEventListener(evt, () => {
+      const value = source.value;
+      if (value === '') return;
+      $$(`#${bodyId} tr`).forEach(tr => {
+        const target = $(targetSel, tr);
+        if (target) target.value = value;
+      });
+      if (isBill) { recalcBill(); saveBillDraft(); } else { recalcQuote(); saveQuoteDraft(); }
+    });
+  });
+}
+
 function readCustomerPdfOptions() {
   try {
     return { quoteShowSpecs: true, billShowSpecs: true, quoteUseCustomerName: false, billUseCustomerName: false, ...(JSON.parse(localStorage.getItem(CUSTOMER_PDF_OPTIONS_KEY) || '{}') || {}) };
@@ -946,7 +1023,6 @@ function addBillRow(data = {}) {
     <td>${lineInput(data.cost || 0, 'cost-input', 'number')}</td>
     <td>${lineInput(data.layer || '0.2', 'layer-input')}</td>
     <td><select class="walls-input"><option></option>${['1','2','3','4','5','6','Custom'].map(v => `<option${data.walls == v ? ' selected' : ''}>${v}</option>`).join('')}</select></td>
-    <td>${lineSelect(data.support || 'tree-auto', 'support-input', LINE_SUPPORT_OPTIONS, 'tree-auto')}</td>
     <td>${lineInput(data.infill || '', 'infill-input')}</td>
     <td>${lineInput(data.weight || '', 'weight-input')}</td>
     <td>${lineInput(data.printTime || '', 'time-input')}</td>
@@ -971,7 +1047,6 @@ function addQuoteRow(data = {}) {
     <td>${lineInput(data.unitPrice ?? data.unit ?? '', 'unit-input', 'number')}</td>
     <td>${lineInput(data.layer || '0.2', 'layer-input')}</td>
     <td><select class="walls-input">${['1','2','3','4','5','6','Custom'].map(v => `<option${data.walls == v ? ' selected' : ''}>${v}</option>`).join('')}</select></td>
-    <td>${lineSelect(data.support || 'tree-auto', 'support-input', LINE_SUPPORT_OPTIONS, 'tree-auto')}</td>
     <td>${lineInput(data.infill || '', 'infill-input')}</td>
     <td>${lineInput(data.weight || '', 'weight-input')}</td>
     <td>${lineInput(data.printTime || '', 'time-input')}</td>
@@ -1204,6 +1279,8 @@ function initBillQuote() {
   if ($('#billUseCustomerFileName')) $('#billUseCustomerFileName').checked = !!pdfOptions.billUseCustomerName;
   restoreBillDraft();
   restoreQuoteDraft();
+  initSetAllRow('quote');
+  initSetAllRow('bill');
   $('#addBillRowBtn').addEventListener('click', () => { addBillRow(); saveBillDraft(); });
   $('#addQuoteRowBtn').addEventListener('click', () => { addQuoteRow(); saveQuoteDraft(); });
   $('#addCalcBillBtn').addEventListener('click', () => addCalculatorResultToLine('bill'));

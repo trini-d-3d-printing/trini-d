@@ -9,8 +9,8 @@
   <link rel="preconnect" href="https://fonts.googleapis.com">
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
-  <link rel="stylesheet" href="../styles.css" />
-  <link rel="stylesheet" href="admin.css" />
+  <link rel="stylesheet" href="../styles.css?v=43" />
+  <link rel="stylesheet" href="admin.css?v=43" />
 </head>
 <body class="admin-body">
   <div class="admin-login" id="adminLogin">
@@ -174,7 +174,7 @@
               <div><span>Service Charge</span><b id="quoteServiceTotal">Rs 0</b></div>
               <div><span>Quotation Total</span><b id="quoteGrandTotal">Rs 0</b></div>
             </div>
-            <div class="table-wrap line-editor"><table><thead><tr><th>Model</th><th>Material</th><th>Color</th><th>Qty</th><th>Unit Price</th><th>Layer</th><th>Walls</th><th>Support</th><th>Infill</th><th>Weight</th><th>Print Time</th><th></th></tr></thead><tbody id="quoteItemsBody"></tbody></table></div>
+            <div class="table-wrap line-editor"><table><thead><tr><th>Model</th><th>Material</th><th>Color</th><th>Qty</th><th>Unit Price</th><th>Layer</th><th>Walls</th><th>Infill</th><th>Weight</th><th>Print Time</th><th></th></tr></thead><tbody id="quoteItemsBody"></tbody></table></div>
             <div class="admin-actions"><button class="btn ghost" id="addQuoteRowBtn" type="button">+ Add Item</button><button class="btn ghost" id="addCalcQuoteBtn" type="button">Add Calculator Result</button><button class="btn ghost" id="resetQuoteBtn" type="button">Reset Quotation</button></div>
             <div class="form-grid admin-form-grid two feature-grid">
               <label class="field"><span>Design / Other Service Name</span><input id="quoteServiceName" type="text" placeholder="Model design / Other service" value="Model Design / Other Service"></label>
@@ -206,7 +206,7 @@
               <label class="field"><span>Paid Method</span><input id="billPaidMethod" type="text" placeholder="Cash / Bank / Online"></label>
               <label class="field"><span>Advance Paid Rs</span><input id="billAdvance" type="text" inputmode="decimal" step="0.01" value="0"></label>
             </div>
-            <div class="table-wrap line-editor"><table><thead><tr><th>Model</th><th>Material</th><th>Color</th><th>Qty</th><th>Unit Price</th><th>Discount</th><th>Cost Rs</th><th>Layer</th><th>Walls</th><th>Support</th><th>Infill</th><th>Weight</th><th>Print Time</th><th></th></tr></thead><tbody id="billItemsBody"></tbody></table></div>
+            <div class="table-wrap line-editor"><table><thead><tr><th>Model</th><th>Material</th><th>Color</th><th>Qty</th><th>Unit Price</th><th>Discount</th><th>Cost Rs</th><th>Layer</th><th>Walls</th><th>Infill</th><th>Weight</th><th>Print Time</th><th></th></tr></thead><tbody id="billItemsBody"></tbody></table></div>
             <div class="admin-actions"><button class="btn ghost" id="addBillRowBtn" type="button">+ Add Item</button><button class="btn ghost" id="addCalcBillBtn" type="button">Add Calculator Result</button><button class="btn ghost" id="resetBillBtn" type="button">Reset Invoice</button></div>
             <div class="form-grid admin-form-grid two feature-grid">
               <label class="field"><span>Design / Other Service Name</span><input id="billServiceName" type="text" placeholder="Model design / Other service" value="Model Design / Other Service"></label>
@@ -284,7 +284,7 @@
         <div class="admin-grid two">
           <article class="admin-card">
             <div class="card-title"><span class="eyebrow">Smart Quote</span><h2>Public estimate profit margin.</h2></div>
-            <p class="muted">Change the profit margin used by the public Smart Quote estimator. The value is stored separately in Firebase and updates open Smart Quote pages in realtime.</p>
+            <p class="muted">Change the profit margin used by the public Smart Quote estimator. The margin and the exact PLA+/PETG+ operational pricing profiles are published to Firebase and used by the public Smart Quote backend.</p>
             <div class="form-grid">
               <label>Smart Quote Profit Margin (%)
                 <input id="smartQuoteProfitMargin" type="number" min="0" max="1000" step="0.01" value="75" inputmode="decimal" />
@@ -325,6 +325,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
   <script src="firebase-config.js"></script>
-  <script src="admin.js"></script>
+  <script src="admin.js?v=43"></script>
 </body>
 </html>
