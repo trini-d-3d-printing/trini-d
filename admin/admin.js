@@ -1347,6 +1347,7 @@ function generateInvoice(e) {
   // They do not create Orders, Costs, Profit, Income, or Budget records.
   // Orders are created only from selected Item Details records.
   db.invoices.unshift(invoiceRecord);
+  db.invoices = db.invoices.slice(0, 50);
   saveDb();
   $('#invoiceNo').value = docId('INV');
   saveBillDraft();
@@ -1391,6 +1392,7 @@ function saveQuotationRecord(data) {
     notes: data.notes,
     documentData: data
   });
+  db.quotes = db.quotes.slice(0, 50);
   saveDb();
   $('#quoteNo').value = docId('QT');
   saveQuoteDraft();
@@ -1678,10 +1680,14 @@ function initDatabase() {
     if (editOrder) return editOrderRecord(editOrder.dataset.editOrder);
     const printInvoice = e.target.closest('[data-print-invoice]');
     if (printInvoice) return printStoredInvoice(printInvoice.dataset.printInvoice);
+    const editInvoice = e.target.closest('[data-edit-invoice]');
+    if (editInvoice) return loadInvoiceIntoEditor(editInvoice.dataset.editInvoice);
     const printQuote = e.target.closest('[data-print-quote]');
     if (printQuote) return printStoredQuote(printQuote.dataset.printQuote);
     const printQuoteInternal = e.target.closest('[data-print-quote-internal]');
     if (printQuoteInternal) return printStoredQuoteInternal(printQuoteInternal.dataset.printQuoteInternal);
+    const editQuote = e.target.closest('[data-edit-quote]');
+    if (editQuote) return loadQuoteIntoEditor(editQuote.dataset.editQuote);
     const del = e.target.closest('[data-delete]');
     if (!del) return;
     deleteRecord(del.dataset.delete, del.dataset.kind);
@@ -1796,6 +1802,53 @@ function printStoredQuoteInternal(recordId) {
   const record = (db.quotes || []).find(r => r.id === recordId);
   if (!record) return alert('Quotation record not found.');
   printInternalQuotationDocument(printableQuoteData(record));
+}
+
+// Loads a previously-saved invoice/quotation's items and header fields back into
+// the Bill/Quotation editor form so it can be tweaked and re-generated as a PDF.
+function loadItemsIntoEditor(items, kind) {
+  const isBill = kind === 'bill';
+  const bodyId = isBill ? 'billItemsBody' : 'quoteItemsBody';
+  const addRow = isBill ? addBillRow : addQuoteRow;
+  const body = $(`#${bodyId}`);
+  body.innerHTML = '';
+  const serviceLine = (items || []).find(item => item.isService);
+  (items || []).filter(item => !item.isService).forEach(item => addRow(item));
+  if (!$(`#${bodyId} tr`)) addRow();
+  const serviceNameEl = $(`#${isBill ? 'bill' : 'quote'}ServiceName`);
+  const serviceChargeEl = $(`#${isBill ? 'bill' : 'quote'}ServiceCharge`);
+  if (serviceNameEl) serviceNameEl.value = serviceLine ? serviceLine.model : 'Model Design / Other Service';
+  if (serviceChargeEl) serviceChargeEl.value = serviceLine ? ceilCurrency(serviceLine.unitPrice) : 0;
+}
+
+function loadInvoiceIntoEditor(recordId) {
+  const record = (db.invoices || []).find(r => r.id === recordId);
+  if (!record) return alert('Invoice record not found.');
+  loadItemsIntoEditor(record.items, 'bill');
+  if ($('#billCustomer')) $('#billCustomer').value = record.customer || '';
+  if ($('#invoiceNo')) $('#invoiceNo').value = record.invoiceNo || docId('INV');
+  if ($('#billDate')) $('#billDate').value = record.date || todayISO();
+  if ($('#billNotes')) $('#billNotes').value = record.notes || '';
+  if ($('#billPaidStatus')) $('#billPaidStatus').value = record.paidStatus || 'Unpaid';
+  if ($('#billPaidMethod')) $('#billPaidMethod').value = record.paidMethod || '';
+  recalcBill();
+  saveBillDraft();
+  setSection('bill');
+  toast('Invoice loaded into the editor. Make changes and Generate to re-save and re-print.');
+}
+
+function loadQuoteIntoEditor(recordId) {
+  const record = (db.quotes || []).find(r => r.id === recordId);
+  if (!record) return alert('Quotation record not found.');
+  loadItemsIntoEditor(record.items, 'quote');
+  if ($('#quoteCustomer')) $('#quoteCustomer').value = record.customer || '';
+  if ($('#quoteNo')) $('#quoteNo').value = record.quoteNo || docId('QT');
+  if ($('#quoteDate')) $('#quoteDate').value = record.date || todayISO();
+  if ($('#quoteNotes')) $('#quoteNotes').value = record.notes || '';
+  recalcQuote();
+  saveQuoteDraft();
+  setSection('quotation');
+  toast('Quotation loaded into the editor. Make changes and Generate to re-save and re-print.');
 }
 
 function deleteRecord(recordId, kind) {
@@ -1960,12 +2013,12 @@ function renderDatabaseTable() {
   if (activeDbTable === 'invoices') {
     rows = (db.invoices || []).filter(include);
     headers = '<tr><th>Date</th><th>Invoice No</th><th>Customer</th><th>Items</th><th>Paid</th><th>Subtotal</th><th>Discount</th><th>Advance</th><th>Balance</th><th>Total</th><th>Actions</th></tr>';
-    body = rows.map(r => `<tr><td>${safe(r.date)}</td><td>${safe(r.invoiceNo || r.orderId)}</td><td>${safe(r.customer)}</td><td>${safe((r.items || []).map(i => i.model).join(', '))}</td><td><span class="pill-status ${String(r.paidStatus || '').toLowerCase()}">${safe(r.paidStatus || '-')}</span></td><td>${money(r.subtotal)}</td><td>${money(r.discount)}</td><td>${money(r.advancePayment)}</td><td>${money(r.balance)}</td><td>${money(r.total)}</td><td class="row-actions"><button class="small-btn" data-print-invoice="${r.id}">Download PDF</button><button class="small-btn" data-delete="${r.id}" data-kind="invoice">Delete</button></td></tr>`).join('');
+    body = rows.map(r => `<tr><td>${safe(r.date)}</td><td>${safe(r.invoiceNo || r.orderId)}</td><td>${safe(r.customer)}</td><td>${safe((r.items || []).map(i => i.model).join(', '))}</td><td><span class="pill-status ${String(r.paidStatus || '').toLowerCase()}">${safe(r.paidStatus || '-')}</span></td><td>${money(r.subtotal)}</td><td>${money(r.discount)}</td><td>${money(r.advancePayment)}</td><td>${money(r.balance)}</td><td>${money(r.total)}</td><td class="row-actions"><button class="small-btn" data-print-invoice="${r.id}">Download PDF</button><button class="small-btn" data-edit-invoice="${r.id}">Edit</button><button class="small-btn" data-delete="${r.id}" data-kind="invoice">Delete</button></td></tr>`).join('');
   }
   if (activeDbTable === 'quotes') {
     rows = db.quotes.filter(include);
     headers = '<tr><th>Date</th><th>Quote No</th><th>Customer</th><th>Items</th><th>Total</th><th>Actions</th></tr>';
-    body = rows.map(r => `<tr><td>${safe(r.date)}</td><td>${safe(r.quoteNo)}</td><td>${safe(r.customer)}</td><td>${safe((r.items || []).map(i => i.model).join(', '))}</td><td>${money(r.total)}</td><td class="row-actions"><button class="small-btn" data-print-quote="${r.id}">Customer PDF</button><button class="small-btn" data-print-quote-internal="${r.id}">Internal PDF</button><button class="small-btn" data-delete="${r.id}" data-kind="quote">Delete</button></td></tr>`).join('');
+    body = rows.map(r => `<tr><td>${safe(r.date)}</td><td>${safe(r.quoteNo)}</td><td>${safe(r.customer)}</td><td>${safe((r.items || []).map(i => i.model).join(', '))}</td><td>${money(r.total)}</td><td class="row-actions"><button class="small-btn" data-print-quote="${r.id}">Customer PDF</button><button class="small-btn" data-print-quote-internal="${r.id}">Internal PDF</button><button class="small-btn" data-edit-quote="${r.id}">Edit</button><button class="small-btn" data-delete="${r.id}" data-kind="quote">Delete</button></td></tr>`).join('');
   }
   if (activeDbTable === 'custom') {
     const groupId = $('#customGroupSelect').value;
