@@ -1585,7 +1585,7 @@ function printDocument(data) {
       return {
         height: 22 + extra,
         html: top => {
-          const subParts = []; if (matColor) subParts.push(`Material: ${safe(matColor)}`); if (item.support) subParts.push(`Support: ${safe(item.support)}`); if (weight) subParts.push(`⚖ ${safe(weight)}`); if (printTime) subParts.push(`⏱ ${safe(printTime)}`);
+          const subParts = []; if (matColor) subParts.push(`Material: ${safe(matColor)}`); if (weight) subParts.push(`⚖ ${safe(weight)}`); if (printTime) subParts.push(`⏱ ${safe(printTime)}`);
           const sub = subParts.length ? `<div class="quote-sub" style="top:22pt">${subParts.join('   |   ')}</div>` : '';
           if (hasQuoteDiscount) {
             return `<div class="doc-row quote-row ${rowClass}" style="top:${top}pt;height:${22 + extra}pt"><div class="td q-model-disc">${safe(item.model).slice(0, 28)}</div><div class="td q-qty-disc">${item.qty}</div><div class="td q-unit-disc">${formatMoneyDot(item.unitPrice)}</div><div class="td q-discount-disc">${item.discount > 0 ? `- ${formatMoneyDot(item.discount)}` : '-'}</div><div class="td q-layer-disc">${item.layer}</div><div class="td q-walls-disc">${item.walls}</div><div class="td q-infill-disc">${item.infill}</div><div class="td q-total-disc">${formatMoneyDot(lineTotal)}</div>${sub}</div>`;
