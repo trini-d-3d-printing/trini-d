@@ -218,8 +218,12 @@
               <label class="field"><span>Design / Other Service Name</span><input id="billServiceName" type="text" placeholder="Model design / Other service" value="Model Design / Other Service"></label>
               <label class="field"><span>Design / Other Service Price Rs</span><input id="billServiceCharge" type="text" inputmode="decimal" value="0"></label>
             </div>
-            <div class="feature-options">
-              <label class="check-field"><input id="billShowCustomerSpecs" type="checkbox"> <span>Show weight and printing time in customer PDF</span></label>
+            <div class="feature-options bill-description-options">
+              <div class="feature-options-title">Customer PDF Item Description</div>
+              <label class="check-field"><input id="billShowMaterial" type="checkbox" checked> <span>Show material</span></label>
+              <label class="check-field"><input id="billShowColor" type="checkbox" checked> <span>Show color</span></label>
+              <label class="check-field"><input id="billShowWeight" type="checkbox" checked> <span>Show weight</span></label>
+              <label class="check-field"><input id="billShowPrintTime" type="checkbox" checked> <span>Show printing time</span></label>
               <label class="check-field"><input id="billUseCustomerFileName" type="checkbox"> <span>Add customer name to PDF file name</span></label>
             </div>
             <label class="field"><span>Notes optional</span><textarea id="billNotes" rows="3" placeholder="Payment note, pickup note..."></textarea></label>

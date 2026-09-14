@@ -965,6 +965,10 @@ function readCustomerPdfOptions() {
       quoteShowWeight: legacyQuote !== false,
       quoteShowPrintTime: legacyQuote !== false,
       quoteUseCustomerName: false,
+      billShowMaterial: true,
+      billShowColor: true,
+      billShowWeight: true,
+      billShowPrintTime: true,
       billShowSpecs: true,
       billUseCustomerName: false
     };
@@ -972,7 +976,7 @@ function readCustomerPdfOptions() {
   } catch (e) {
     return {
       quoteShowMaterial: true, quoteShowColor: true, quoteShowWeight: true, quoteShowPrintTime: true,
-      quoteUseCustomerName: false, billShowSpecs: true, billUseCustomerName: false
+      quoteUseCustomerName: false, billShowMaterial: true, billShowColor: true, billShowWeight: true, billShowPrintTime: true, billShowSpecs: true, billUseCustomerName: false
     };
   }
 }
@@ -985,7 +989,11 @@ function writeCustomerPdfOptions() {
     quoteShowPrintTime: !!$('#quoteShowPrintTime')?.checked,
     // Keep legacy field for backwards compatibility with older drafts/settings.
     quoteShowSpecs: (!!$('#quoteShowWeight')?.checked || !!$('#quoteShowPrintTime')?.checked),
-    billShowSpecs: !!$('#billShowCustomerSpecs')?.checked,
+    billShowMaterial: !!$('#billShowMaterial')?.checked,
+    billShowColor: !!$('#billShowColor')?.checked,
+    billShowWeight: !!$('#billShowWeight')?.checked,
+    billShowPrintTime: !!$('#billShowPrintTime')?.checked,
+    billShowSpecs: (!!$('#billShowWeight')?.checked || !!$('#billShowPrintTime')?.checked),
     quoteUseCustomerName: !!$('#quoteUseCustomerFileName')?.checked,
     billUseCustomerName: !!$('#billUseCustomerFileName')?.checked
   };
@@ -1205,7 +1213,11 @@ function saveBillDraft() {
     notes: $('#billNotes')?.value || '',
     serviceName: $('#billServiceName')?.value || '',
     serviceCharge: $('#billServiceCharge')?.value || '0',
-    showCustomerSpecs: !!$('#billShowCustomerSpecs')?.checked,
+    showMaterial: !!$('#billShowMaterial')?.checked,
+    showColor: !!$('#billShowColor')?.checked,
+    showWeight: !!$('#billShowWeight')?.checked,
+    showPrintTime: !!$('#billShowPrintTime')?.checked,
+    showCustomerSpecs: (!!$('#billShowWeight')?.checked || !!$('#billShowPrintTime')?.checked),
     useCustomerFileName: !!$('#billUseCustomerFileName')?.checked,
     items: collectBillItems()
   });
@@ -1247,7 +1259,11 @@ function restoreBillDraft() {
     $('#billNotes').value = draft.notes || '';
     $('#billServiceName').value = draft.serviceName || 'Model Design / Other Service';
     $('#billServiceCharge').value = draft.serviceCharge || '0';
-    $('#billShowCustomerSpecs').checked = draft.showCustomerSpecs !== false;
+    const legacyBillSpecs = draft.showCustomerSpecs !== undefined ? draft.showCustomerSpecs !== false : true;
+    $('#billShowMaterial').checked = draft.showMaterial !== undefined ? draft.showMaterial !== false : legacyBillSpecs;
+    $('#billShowColor').checked = draft.showColor !== undefined ? draft.showColor !== false : legacyBillSpecs;
+    $('#billShowWeight').checked = draft.showWeight !== undefined ? draft.showWeight !== false : legacyBillSpecs;
+    $('#billShowPrintTime').checked = draft.showPrintTime !== undefined ? draft.showPrintTime !== false : legacyBillSpecs;
     $('#billUseCustomerFileName').checked = !!draft.useCustomerFileName;
     (draft.items && draft.items.length ? draft.items : [{}]).forEach(item => addBillRow(item));
   } else {
@@ -1287,6 +1303,12 @@ function resetBillDraft() {
   $('#billNotes').value = '';
   $('#billServiceName').value = 'Model Design / Other Service';
   $('#billServiceCharge').value = '0';
+  if ($('#billShowMaterial')) $('#billShowMaterial').checked = true;
+  if ($('#billShowColor')) $('#billShowColor').checked = true;
+  if ($('#billShowWeight')) $('#billShowWeight').checked = true;
+  if ($('#billShowPrintTime')) $('#billShowPrintTime').checked = true;
+  if ($('#billUseCustomerFileName')) $('#billUseCustomerFileName').checked = false;
+  writeCustomerPdfOptions();
   $('#billItemsBody').innerHTML = '';
   addBillRow();
   saveBillDraft();
@@ -1319,7 +1341,10 @@ function initBillQuote() {
   if ($('#quoteShowColor')) $('#quoteShowColor').checked = pdfOptions.quoteShowColor !== false;
   if ($('#quoteShowWeight')) $('#quoteShowWeight').checked = pdfOptions.quoteShowWeight !== false;
   if ($('#quoteShowPrintTime')) $('#quoteShowPrintTime').checked = pdfOptions.quoteShowPrintTime !== false;
-  if ($('#billShowCustomerSpecs')) $('#billShowCustomerSpecs').checked = pdfOptions.billShowSpecs !== false;
+  if ($('#billShowMaterial')) $('#billShowMaterial').checked = pdfOptions.billShowMaterial !== false;
+  if ($('#billShowColor')) $('#billShowColor').checked = pdfOptions.billShowColor !== false;
+  if ($('#billShowWeight')) $('#billShowWeight').checked = pdfOptions.billShowWeight !== false;
+  if ($('#billShowPrintTime')) $('#billShowPrintTime').checked = pdfOptions.billShowPrintTime !== false;
   if ($('#quoteUseCustomerFileName')) $('#quoteUseCustomerFileName').checked = !!pdfOptions.quoteUseCustomerName;
   if ($('#billUseCustomerFileName')) $('#billUseCustomerFileName').checked = !!pdfOptions.billUseCustomerName;
   restoreBillDraft();
@@ -1335,7 +1360,7 @@ function initBillQuote() {
   ['quoteCustomer', 'quoteNo', 'quoteDate', 'quoteNotes', 'quoteServiceName', 'quoteServiceCharge'].forEach(key => $(`#${key}`)?.addEventListener('input', () => { recalcQuote(); saveQuoteDraft(); }));
   ['billCustomer', 'invoiceNo', 'billDate', 'billPaidStatus', 'billPaidMethod', 'billAdvance', 'billNotes', 'billServiceName', 'billServiceCharge'].forEach(key => $(`#${key}`)?.addEventListener('input', () => { recalcBill(); saveBillDraft(); }));
   ['quoteShowMaterial', 'quoteShowColor', 'quoteShowWeight', 'quoteShowPrintTime', 'quoteUseCustomerFileName'].forEach(key => $(`#${key}`)?.addEventListener('change', () => { writeCustomerPdfOptions(); saveQuoteDraft(); }));
-  ['billShowCustomerSpecs', 'billUseCustomerFileName'].forEach(key => $(`#${key}`)?.addEventListener('change', () => { writeCustomerPdfOptions(); saveBillDraft(); }));
+  ['billShowMaterial', 'billShowColor', 'billShowWeight', 'billShowPrintTime', 'billUseCustomerFileName'].forEach(key => $(`#${key}`)?.addEventListener('change', () => { writeCustomerPdfOptions(); saveBillDraft(); }));
   $('#billItemsBody').addEventListener('input', () => { recalcBill(); saveBillDraft(); });
   $('#billItemsBody').addEventListener('change', () => { recalcBill(); saveBillDraft(); });
   $('#quoteItemsBody').addEventListener('input', () => { recalcQuote(); saveQuoteDraft(); });
@@ -1373,7 +1398,11 @@ function generateInvoice(e) {
     notes: $('#billNotes').value.trim(),
     serviceName: serviceInfo('bill').name,
     serviceCharge: totals.serviceCharge,
-    showCustomerSpecs: !!$('#billShowCustomerSpecs')?.checked,
+    showMaterial: !!$('#billShowMaterial')?.checked,
+    showColor: !!$('#billShowColor')?.checked,
+    showWeight: !!$('#billShowWeight')?.checked,
+    showPrintTime: !!$('#billShowPrintTime')?.checked,
+    showCustomerSpecs: (!!$('#billShowWeight')?.checked || !!$('#billShowPrintTime')?.checked),
     useCustomerFileName: !!$('#billUseCustomerFileName')?.checked,
     items: addServiceLine(items, 'bill'),
     totals,
@@ -1586,10 +1615,10 @@ function printDocument(data) {
   const filePrefix = isInvoice ? 'Invoice' : 'Quote';
   const fileTitle = customerFileTitle(filePrefix, data.no, data.customer, data.useCustomerFileName);
   const showCustomerSpecs = data.showCustomerSpecs !== false;
-  const showQuoteMaterial = isInvoice ? true : (data.showMaterial !== undefined ? data.showMaterial !== false : showCustomerSpecs);
-  const showQuoteColor = isInvoice ? true : (data.showColor !== undefined ? data.showColor !== false : showCustomerSpecs);
-  const showQuoteWeight = isInvoice ? showCustomerSpecs : (data.showWeight !== undefined ? data.showWeight !== false : showCustomerSpecs);
-  const showQuotePrintTime = isInvoice ? showCustomerSpecs : (data.showPrintTime !== undefined ? data.showPrintTime !== false : showCustomerSpecs);
+  const showItemMaterial = data.showMaterial !== undefined ? data.showMaterial !== false : (isInvoice ? true : showCustomerSpecs);
+  const showItemColor = data.showColor !== undefined ? data.showColor !== false : (isInvoice ? true : showCustomerSpecs);
+  const showItemWeight = data.showWeight !== undefined ? data.showWeight !== false : showCustomerSpecs;
+  const showItemPrintTime = data.showPrintTime !== undefined ? data.showPrintTime !== false : showCustomerSpecs;
   const thanks = isInvoice ? 'Thank you for your business!' : 'Thank you for choosing Trini-D!';
   const formatNumber = v => Number(v || 0).toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const formatMoneyDot = v => `Rs. ${ceilCurrency(v).toLocaleString('en-LK', { maximumFractionDigits: 0 })}`;
@@ -1623,11 +1652,11 @@ function printDocument(data) {
     const lineTotal = Math.max(0, (item.qty * item.unitPrice) - item.discount);
     const rowClass = index % 2 === 0 ? 'row-light' : 'row-white';
     if (!isInvoice) {
-      const weight = showQuoteWeight ? (item.weight || '') : '';
-      const printTime = showQuotePrintTime ? (item.printTime || '') : '';
+      const weight = showItemWeight ? (item.weight || '') : '';
+      const printTime = showItemPrintTime ? (item.printTime || '') : '';
       const descriptionParts = [];
-      if (showQuoteMaterial && item.materialType) descriptionParts.push(`Material: ${item.materialType}`);
-      if (showQuoteColor && item.color) descriptionParts.push(`Color: ${item.color}`);
+      if (showItemMaterial && item.materialType) descriptionParts.push(`Material: ${item.materialType}`);
+      if (showItemColor && item.color) descriptionParts.push(`Color: ${item.color}`);
       const extra = weight || printTime || descriptionParts.length ? 16 : 0;
       return {
         height: 22 + extra,
@@ -1647,13 +1676,14 @@ function printDocument(data) {
     const hasSpecs = item.layer || item.walls || item.infill;
     const rowHeight = 22 + (hasSpecs ? 14 : 0);
     const specParts = [];
-    if (item.materialType || item.color) specParts.push(`Material: ${[item.materialType, item.color].filter(Boolean).join(' / ')}`);
+    if (showItemMaterial && item.materialType) specParts.push(`Material: ${item.materialType}`);
+    if (showItemColor && item.color) specParts.push(`Color: ${item.color}`);
     if (item.layer) specParts.push(`Layer: ${item.layer}`);
     if (item.walls) specParts.push(`Walls: ${item.walls}`);
     if (item.support) specParts.push(`Support: ${item.support}`);
     if (item.infill) specParts.push(`Infill: ${item.infill}`);
-    if (showCustomerSpecs && item.weight) specParts.push(`Weight: ${item.weight}`);
-    if (showCustomerSpecs && item.printTime) specParts.push(`Time: ${item.printTime}`);
+    if (showItemWeight && item.weight) specParts.push(`Weight: ${item.weight}`);
+    if (showItemPrintTime && item.printTime) specParts.push(`Time: ${item.printTime}`);
     return {
       height: rowHeight,
       html: top => {

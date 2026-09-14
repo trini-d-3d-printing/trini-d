@@ -357,3 +357,7 @@ input[type="number"]::-webkit-inner-spin-button {
 /* v51 - independent quotation PDF item-description controls */
 .quote-description-options{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:14px 16px;border:1px solid rgba(255,159,28,.18);border-radius:14px;background:rgba(255,255,255,.025)}
 .quote-description-options .feature-options-title{width:100%;font-weight:900;color:var(--admin-gold);font-size:.78rem;text-transform:uppercase;letter-spacing:.08em;margin-bottom:1px}
+
+/* v52 - independent bill customer PDF item-description controls */
+.bill-description-options{display:flex;align-items:center;gap:14px;flex-wrap:wrap;padding:14px 16px;border:1px solid rgba(255,159,28,.18);border-radius:14px;background:rgba(255,255,255,.025)}
+.bill-description-options .feature-options-title{width:100%;font-weight:900;color:var(--admin-gold);font-size:.78rem;text-transform:uppercase;letter-spacing:.08em;margin-bottom:1px}
