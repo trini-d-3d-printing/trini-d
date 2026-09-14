@@ -548,6 +548,7 @@ function setSection(name) {
   $$('.admin-nav-link').forEach(btn => btn.classList.toggle('active', btn.dataset.section === name));
   $$('.admin-section').forEach(section => section.classList.toggle('active', section.id === `section-${name}`));
   if (name === 'database') renderDatabaseTable();
+  if (name === 'reports') generateWebsiteReport();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
 
@@ -907,7 +908,8 @@ function buildSetAllRow(kind) {
     `<th>${setAllInput('set-all-qty', 'Qty')}</th>`,
     `<th></th>`
   ];
-  if (isBill) cells.push(`<th></th>`, `<th></th>`);
+  cells.push(`<th>${setAllInput('set-all-discount', 'Discount')}</th>`);
+  if (isBill) cells.push(`<th></th>`);
   cells.push(
     `<th>${setAllInput('set-all-layer', 'Layer')}</th>`,
     `<th>${setAllSelect('set-all-walls', LINE_WALLS_OPTIONS)}</th>`,
@@ -932,6 +934,7 @@ function initSetAllRow(kind) {
     ['.set-all-material', '.material-input'],
     ['.set-all-color', '.color-input'],
     ['.set-all-qty', '.qty-input'],
+    ['.set-all-discount', '.discount-input'],
     ['.set-all-layer', '.layer-input'],
     ['.set-all-walls', '.walls-input'],
     ['.set-all-infill', '.infill-input']
@@ -1045,6 +1048,7 @@ function addQuoteRow(data = {}) {
     <td>${lineSelect(hasOwn(data, 'color') ? colorText(data) : 'Black', 'color-input', LINE_COLOR_OPTIONS, 'Black')}</td>
     <td>${lineInput(data.qty || 1, 'qty-input', 'number')}</td>
     <td>${lineInput(data.unitPrice ?? data.unit ?? '', 'unit-input', 'number')}</td>
+    <td>${lineInput(data.discount || 0, 'discount-input', 'number')}</td>
     <td>${lineInput(data.layer || '0.2', 'layer-input')}</td>
     <td><select class="walls-input">${['1','2','3','4','5','6','Custom'].map(v => `<option${data.walls == v ? ' selected' : ''}>${v}</option>`).join('')}</select></td>
     <td>${lineInput(data.infill || '', 'infill-input')}</td>
@@ -1081,6 +1085,7 @@ function collectQuoteItems() {
     color: $('.color-input', tr) ? noneBlank($('.color-input', tr).value) : 'Black',
     qty: num($('.qty-input', tr).value) || 1,
     unitPrice: ceilCurrency($('.unit-input', tr).value),
+    discount: ceilCurrency($('.discount-input', tr).value),
     layer: $('.layer-input', tr).value.trim(),
     walls: $('.walls-input', tr).value.trim(),
     support: $('.support-input', tr) ? $('.support-input', tr).value.trim() : 'tree-auto',
@@ -1134,11 +1139,13 @@ function parsePrintTimeMinutes(value) {
 
 function quoteTotals(items = collectQuoteItems()) {
   const serviceCharge = serviceInfo('quote').charge;
-  const itemsTotal = ceilCurrency(items.reduce((sum, item) => sum + ((num(item.qty) || 1) * ceilCurrency(item.unitPrice)), 0));
-  const total = ceilCurrency(itemsTotal + serviceCharge);
+  const itemsSubtotal = ceilCurrency(items.reduce((sum, item) => sum + ((num(item.qty) || 1) * ceilCurrency(item.unitPrice)), 0));
+  const discount = ceilCurrency(items.reduce((sum, item) => sum + Math.min(ceilCurrency(item.discount || 0), ((num(item.qty) || 1) * ceilCurrency(item.unitPrice))), 0));
+  const subtotal = ceilCurrency(itemsSubtotal + serviceCharge);
+  const total = ceilCurrency(Math.max(0, subtotal - discount));
   const weightG = items.reduce((sum, item) => sum + ((num(item.qty) || 1) * parseWeightG(item.weight)), 0);
   const printMinutes = items.reduce((sum, item) => sum + ((num(item.qty) || 1) * parsePrintTimeMinutes(item.printTime)), 0);
-  return { total, itemsTotal, serviceCharge, weightG, printMinutes };
+  return { total, itemsTotal: itemsSubtotal, subtotal, discount, serviceCharge, weightG, printMinutes };
 }
 
 function readDraft(key) {
@@ -1264,6 +1271,7 @@ function recalcBill() {
 function recalcQuote() {
   const totals = quoteTotals();
   if ($('#quoteServiceTotal')) $('#quoteServiceTotal').textContent = money(totals.serviceCharge);
+  if ($('#quoteDiscount')) $('#quoteDiscount').textContent = money(totals.discount);
   $('#quoteGrandTotal').textContent = money(totals.total);
   const weightEl = $('#quoteTotalWeight');
   const timeEl = $('#quoteTotalTime');
@@ -1431,10 +1439,13 @@ function printInternalQuotationDocument(data) {
   const itemWeightG = item => parseWeightG(item.weight || item.weightG || item.filamentWeightG || '');
   const itemPrintMinutes = item => parsePrintTimeMinutes(item.printTime || item.print_time || item.printTimeText || '');
   const itemMargin = item => {
+    const qty = num(item.qty) || 1;
     const unitPrice = num(item.unitPrice ?? item.unit);
+    const discount = Math.max(0, Math.min(num(item.discount), qty * unitPrice));
+    const netUnitPrice = Math.max(0, (qty * unitPrice - discount) / qty);
     const unitCost = num(item.totalCost || item.cost);
     if (!unitCost) return 0;
-    return ((unitPrice - unitCost) / unitCost) * 100;
+    return ((netUnitPrice - unitCost) / unitCost) * 100;
   };
 
   const items = (data.items || []).map(item => {
@@ -1445,7 +1456,8 @@ function printInternalQuotationDocument(data) {
     const unitMachine = num(item.machineDepreciation);
     const explicitUnitCost = num(item.totalCost || item.cost);
     const unitCost = explicitUnitCost || (unitElectricity + unitFilament + unitMachine);
-    const linePrice = qty * unitPrice;
+    const discount = Math.max(0, Math.min(num(item.discount), qty * unitPrice));
+    const linePrice = Math.max(0, qty * unitPrice - discount);
     const lineCost = qty * unitCost;
     const lineElectricity = qty * unitElectricity;
     const lineFilament = qty * unitFilament;
@@ -1460,6 +1472,7 @@ function printInternalQuotationDocument(data) {
       unitFilament,
       unitMachine,
       unitCost,
+      discount,
       linePrice,
       lineCost,
       lineElectricity,
@@ -1493,6 +1506,7 @@ function printInternalQuotationDocument(data) {
       <td>${safe(item.model || '')}${materialColorText(item) ? `<br><small>${safe(materialColorText(item))}</small>` : ''}</td>
       <td>${item.qty}</td>
       <td>${formatMoneyDot(item.unitPrice)}</td>
+      <td>${item.discount > 0 ? `- ${formatMoneyDot(item.discount)}` : '-'}</td>
       <td>${layer}</td>
       <td>${safe(item.walls || '')}</td>
       <td>${safe(supportText(item.support || 'tree-auto'))}</td>
@@ -1515,7 +1529,7 @@ function printInternalQuotationDocument(data) {
     </tr>`).join('');
 
   const html = `<!doctype html><html><head><base href="${location.href}"><title>${safe(customerFileTitle('Internal_Quote', data.no, data.customer, data.useCustomerFileName))}</title><style>
-    @page{size:A4;margin:10mm}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}.print-btn{position:fixed;right:12px;top:12px;z-index:10;border:0;border-radius:999px;background:#d4af37;color:#111;font-weight:900;padding:10px 16px;cursor:pointer}@media print{.print-btn{display:none}}.head{border-bottom:3px solid #d4af37;background:#111;color:#fff;padding:14px 16px;margin-bottom:12px}.brand{display:flex;align-items:center;gap:12px}.brand img{width:50px;height:50px;object-fit:contain}.title{margin-left:auto;text-align:right}.title h1{margin:0;color:#d4af37;font-size:22px}.title p{margin:4px 0 0;font-size:12px}.warning{background:#fff3cd;border:1px solid #d4af37;padding:8px 11px;font-weight:700;margin:8px 0 12px}.meta{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px}.meta div{background:#f2f2f2;padding:8px 10px;border-radius:6px}.meta b{display:block;font-size:10px;color:#555;text-transform:uppercase}.meta span{font-size:13px;font-weight:700}.section-title{font-size:13px;font-weight:900;color:#111;border-left:5px solid #d4af37;padding-left:8px;margin:14px 0 8px}table{width:100%;border-collapse:collapse;font-size:9.3px;page-break-inside:auto}th{background:#111;color:#d4af37;text-align:left;padding:6px 5px;border:1px solid #333}td{padding:5px;border:1px solid #ccc;vertical-align:top}tr:nth-child(even) td{background:#f7f7f7}.text-right{text-align:right}.summary{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px;page-break-inside:avoid}.summary div{display:flex;justify-content:space-between;background:#f2f2f2;padding:8px 10px;border-radius:4px;font-size:11px}.summary .final{background:#d4af37;font-weight:900}.notes{margin-top:12px;font-size:10.5px;color:#333}.footer-note{margin-top:10px;font-size:10px;color:#777;font-weight:700}.page-break{page-break-inside:avoid}</style></head><body><button class="print-btn" onclick="window.print()">Print / Save Internal PDF</button><section class="head"><div class="brand"><img src="../assets/logo.png" alt="Trini-D"><div><strong>TRINI-D 3D Printing</strong><br><small>Internal quotation copy</small></div><div class="title"><h1>INTERNAL QUOTATION</h1><p># ${safe(data.no)}</p></div></div></section><div class="warning">INTERNAL COPY ONLY — Do not send this PDF to the customer.</div><section class="meta"><div><b>Customer</b><span>${safe(data.customer || 'Customer')}</span></div><div><b>Date</b><span>${safe(prettyDate(data.date))}</span></div><div><b>Quote No</b><span>${safe(data.no)}</span></div></section><div class="section-title">Customer Quotation Details</div><table><thead><tr><th>#</th><th>Model / Description</th><th>Qty</th><th>Unit Price</th><th>Layer</th><th>Walls</th><th>Support</th><th>Infill</th><th>Total</th></tr></thead><tbody>${customerRows}</tbody></table><div class="section-title">Internal Cost & Profit Details</div><table><thead><tr><th>#</th><th>Model</th><th>Part Time</th><th>Part Weight</th><th>Electricity Cost</th><th>Filament Cost</th><th>Machine Cost</th><th>Total Cost</th><th>Profit</th><th>Profit Margin</th></tr></thead><tbody>${internalRows}</tbody></table><section class="summary page-break"><div><span>Total Weight</span><b>${formatNumber(totals.weightG)} g</b></div><div><span>Total Time</span><b>${minutesLabel(totals.printMinutes)}</b></div><div><span>Total Electricity Cost</span><b>${formatMoneyDot(totals.electricity)}</b></div><div><span>Total Filament Cost</span><b>${formatMoneyDot(totals.filament)}</b></div><div><span>Total Machine Cost</span><b>${formatMoneyDot(totals.machine)}</b></div><div><span>Total Cost</span><b>${formatMoneyDot(totals.cost)}</b></div><div><span>Customer Quotation Total</span><b>${formatMoneyDot(totals.price)}</b></div><div class="final"><span>Total Profit</span><b>${formatMoneyDot(totals.profit)}</b></div></section>${data.notes ? `<section class="notes"><b>Notes:</b><br>${safe(data.notes).split('\n').join('<br>')}</section>` : ''}<div class="footer-note">This internal PDF includes cost, time, weight, and profit details for business use only.</div><script>window.onload = () => setTimeout(() => window.print(), 500);</script></body></html>`;
+    @page{size:A4;margin:10mm}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}.print-btn{position:fixed;right:12px;top:12px;z-index:10;border:0;border-radius:999px;background:#d4af37;color:#111;font-weight:900;padding:10px 16px;cursor:pointer}@media print{.print-btn{display:none}}.head{border-bottom:3px solid #d4af37;background:#111;color:#fff;padding:14px 16px;margin-bottom:12px}.brand{display:flex;align-items:center;gap:12px}.brand img{width:50px;height:50px;object-fit:contain}.title{margin-left:auto;text-align:right}.title h1{margin:0;color:#d4af37;font-size:22px}.title p{margin:4px 0 0;font-size:12px}.warning{background:#fff3cd;border:1px solid #d4af37;padding:8px 11px;font-weight:700;margin:8px 0 12px}.meta{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px}.meta div{background:#f2f2f2;padding:8px 10px;border-radius:6px}.meta b{display:block;font-size:10px;color:#555;text-transform:uppercase}.meta span{font-size:13px;font-weight:700}.section-title{font-size:13px;font-weight:900;color:#111;border-left:5px solid #d4af37;padding-left:8px;margin:14px 0 8px}table{width:100%;border-collapse:collapse;font-size:9.3px;page-break-inside:auto}th{background:#111;color:#d4af37;text-align:left;padding:6px 5px;border:1px solid #333}td{padding:5px;border:1px solid #ccc;vertical-align:top}tr:nth-child(even) td{background:#f7f7f7}.text-right{text-align:right}.summary{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px;page-break-inside:avoid}.summary div{display:flex;justify-content:space-between;background:#f2f2f2;padding:8px 10px;border-radius:4px;font-size:11px}.summary .final{background:#d4af37;font-weight:900}.notes{margin-top:12px;font-size:10.5px;color:#333}.footer-note{margin-top:10px;font-size:10px;color:#777;font-weight:700}.page-break{page-break-inside:avoid}</style></head><body><button class="print-btn" onclick="window.print()">Print / Save Internal PDF</button><section class="head"><div class="brand"><img src="../assets/logo.png" alt="Trini-D"><div><strong>TRINI-D 3D Printing</strong><br><small>Internal quotation copy</small></div><div class="title"><h1>INTERNAL QUOTATION</h1><p># ${safe(data.no)}</p></div></div></section><div class="warning">INTERNAL COPY ONLY — Do not send this PDF to the customer.</div><section class="meta"><div><b>Customer</b><span>${safe(data.customer || 'Customer')}</span></div><div><b>Date</b><span>${safe(prettyDate(data.date))}</span></div><div><b>Quote No</b><span>${safe(data.no)}</span></div></section><div class="section-title">Customer Quotation Details</div><table><thead><tr><th>#</th><th>Model / Description</th><th>Qty</th><th>Unit Price</th><th>Discount</th><th>Layer</th><th>Walls</th><th>Support</th><th>Infill</th><th>Total</th></tr></thead><tbody>${customerRows}</tbody></table><div class="section-title">Internal Cost & Profit Details</div><table><thead><tr><th>#</th><th>Model</th><th>Part Time</th><th>Part Weight</th><th>Electricity Cost</th><th>Filament Cost</th><th>Machine Cost</th><th>Total Cost</th><th>Profit</th><th>Profit Margin</th></tr></thead><tbody>${internalRows}</tbody></table><section class="summary page-break"><div><span>Total Weight</span><b>${formatNumber(totals.weightG)} g</b></div><div><span>Total Time</span><b>${minutesLabel(totals.printMinutes)}</b></div><div><span>Total Electricity Cost</span><b>${formatMoneyDot(totals.electricity)}</b></div><div><span>Total Filament Cost</span><b>${formatMoneyDot(totals.filament)}</b></div><div><span>Total Machine Cost</span><b>${formatMoneyDot(totals.machine)}</b></div><div><span>Total Cost</span><b>${formatMoneyDot(totals.cost)}</b></div><div><span>Subtotal</span><b>${formatMoneyDot(totals.price + items.reduce((s,i) => s + i.discount, 0))}</b></div><div><span>Total Discount</span><b>- ${formatMoneyDot(items.reduce((s,i) => s + i.discount, 0))}</b></div><div><span>Customer Quotation Total</span><b>${formatMoneyDot(totals.price)}</b></div><div class="final"><span>Total Profit</span><b>${formatMoneyDot(totals.profit)}</b></div></section>${data.notes ? `<section class="notes"><b>Notes:</b><br>${safe(data.notes).split('\n').join('<br>')}</section>` : ''}<div class="footer-note">This internal PDF includes cost, time, weight, and profit details for business use only.</div><script>window.onload = () => setTimeout(() => window.print(), 500);</script></body></html>`;
   const win = window.open('', '_blank');
   win.document.write(html);
   win.document.close();
@@ -1551,14 +1565,17 @@ function printDocument(data) {
     printTime: item.printTime || item.print_time || ''
   }));
   const hasInvoiceDiscount = isInvoice && preparedItems.some(item => item.discount > 0);
+  const hasQuoteDiscount = !isInvoice && preparedItems.some(item => item.discount > 0);
 
-  const quoteHeaders = `<div class="th c-model">MODEL / DESCRIPTION</div><div class="th c-qty">Quantity</div><div class="th c-unit">UNIT PRICE</div><div class="th c-layer">LAYER</div><div class="th c-walls">WALLS</div><div class="th c-infill">INFILL</div><div class="th c-total">TOTAL</div>`;
+  const quoteHeaders = hasQuoteDiscount
+    ? `<div class="th q-model-disc">MODEL / DESCRIPTION</div><div class="th q-qty-disc">Quantity</div><div class="th q-unit-disc">UNIT PRICE</div><div class="th q-discount-disc">DISCOUNT</div><div class="th q-layer-disc">LAYER</div><div class="th q-walls-disc">WALLS</div><div class="th q-infill-disc">INFILL</div><div class="th q-total-disc">TOTAL</div>`
+    : `<div class="th c-model">MODEL / DESCRIPTION</div><div class="th c-qty">Quantity</div><div class="th c-unit">UNIT PRICE</div><div class="th c-layer">LAYER</div><div class="th c-walls">WALLS</div><div class="th c-infill">INFILL</div><div class="th c-total">TOTAL</div>`;
   const invoiceHeaders = hasInvoiceDiscount
     ? `<div class="th i-model-disc">MODEL / DESCRIPTION</div><div class="th i-qty-disc">Quantity</div><div class="th i-unit-disc">UNIT PRICE</div><div class="th i-discount-disc">DISCOUNT</div><div class="th i-total-disc">TOTAL</div>`
     : `<div class="th i-model">MODEL / DESCRIPTION</div><div class="th i-qty">Quantity</div><div class="th i-unit">UNIT PRICE</div><div class="th i-total">TOTAL</div>`;
 
   function rowInfo(item, index) {
-    const lineTotal = isInvoice ? Math.max(0, (item.qty * item.unitPrice) - item.discount) : (item.qty * item.unitPrice);
+    const lineTotal = Math.max(0, (item.qty * item.unitPrice) - item.discount);
     const rowClass = index % 2 === 0 ? 'row-light' : 'row-white';
     if (!isInvoice) {
       const weight = showCustomerSpecs ? (item.weight || '') : '';
@@ -1570,6 +1587,9 @@ function printDocument(data) {
         html: top => {
           const subParts = []; if (matColor) subParts.push(`Material: ${safe(matColor)}`); if (item.support) subParts.push(`Support: ${safe(item.support)}`); if (weight) subParts.push(`⚖ ${safe(weight)}`); if (printTime) subParts.push(`⏱ ${safe(printTime)}`);
           const sub = subParts.length ? `<div class="quote-sub" style="top:22pt">${subParts.join('   |   ')}</div>` : '';
+          if (hasQuoteDiscount) {
+            return `<div class="doc-row quote-row ${rowClass}" style="top:${top}pt;height:${22 + extra}pt"><div class="td q-model-disc">${safe(item.model).slice(0, 28)}</div><div class="td q-qty-disc">${item.qty}</div><div class="td q-unit-disc">${formatMoneyDot(item.unitPrice)}</div><div class="td q-discount-disc">${item.discount > 0 ? `- ${formatMoneyDot(item.discount)}` : '-'}</div><div class="td q-layer-disc">${item.layer}</div><div class="td q-walls-disc">${item.walls}</div><div class="td q-infill-disc">${item.infill}</div><div class="td q-total-disc">${formatMoneyDot(lineTotal)}</div>${sub}</div>`;
+          }
           return `<div class="doc-row quote-row ${rowClass}" style="top:${top}pt;height:${22 + extra}pt"><div class="td q-model">${safe(item.model).slice(0, 30)}</div><div class="td q-qty">${item.qty}</div><div class="td q-unit">${formatMoneyDot(item.unitPrice)}</div><div class="td q-layer">${item.layer}</div><div class="td q-walls">${item.walls}</div><div class="td q-infill">${item.infill}</div><div class="td q-total">${formatMoneyDot(lineTotal)}</div>${sub}</div>`;
         }
       };
@@ -1611,7 +1631,15 @@ function printDocument(data) {
   chunks.push({ rows: current, height });
 
   const totalsHtml = (() => {
-    if (!isInvoice) return `<div class="total-quote"><span>${totalLabel}</span><b>${formatMoneyDot(data.totals.total)}</b></div>`;
+    if (!isInvoice) {
+      const parts = [];
+      if (data.totals.discount > 0) {
+        parts.push(`<div class="total-mini"><span>Subtotal</span><b>${formatMoneyDot(data.totals.subtotal)}</b></div>`);
+        parts.push(`<div class="total-mini red"><span>Total Discount</span><b>- ${formatMoneyDot(data.totals.discount)}</b></div>`);
+      }
+      parts.push(`<div class="total-quote"><span>${totalLabel}</span><b>${formatMoneyDot(data.totals.total)}</b></div>`);
+      return parts.join('');
+    }
     const parts = [];
     if (data.totals.discount > 0) {
       parts.push(`<div class="total-mini"><span>Subtotal</span><b>${formatMoneyDot(data.totals.subtotal)}</b></div>`);
@@ -1641,7 +1669,7 @@ function printDocument(data) {
 
   const pagesHtml = chunks.map(renderPage).join('');
   const html = `<!doctype html><html><head><base href="${location.href}"><title>${safe(fileTitle)}</title><style>
-    @page{size:A4;margin:0}*{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff;color:#111;font-family:Arial,Helvetica,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}.print-btn{position:fixed;right:12px;top:12px;z-index:50;border:0;border-radius:999px;background:#d4af37;color:#111;font-weight:900;padding:10px 16px;box-shadow:0 10px 30px rgba(0,0,0,.25);cursor:pointer}@media print{.print-btn{display:none}.page{margin:0!important;page-break-after:always}.page:last-child{page-break-after:auto}}.page{width:210mm;height:297mm;margin:0 auto;background:#fff;position:relative;overflow:hidden}.header{position:absolute;left:0;top:0;width:210mm;height:110pt;background:#111;border-bottom:2.5pt solid #d4af37}.logo{position:absolute;left:18mm;top:16pt;width:78pt;height:78pt;object-fit:contain}.brand-name{position:absolute;left:139pt;top:22pt;width:180pt;height:46pt;object-fit:contain}.header-motto{position:absolute;left:139pt;top:76pt;width:180pt;text-align:center;font-size:6pt;font-weight:700;letter-spacing:.02em;white-space:nowrap;color:#e8e8e8;line-height:1}.header-motto .gold{color:#d4af37}.doc-title{position:absolute;right:18mm;top:35pt;text-align:right;color:#fff;font-size:20pt;font-weight:700;line-height:1;letter-spacing:.02em}.doc-id-top{position:absolute;right:18mm;top:67pt;text-align:right;color:#d4af37;font-size:9pt;line-height:1}.panel{position:absolute;left:18mm;top:120pt;width:174mm;height:68pt;background:#f2f2f2;border-radius:6pt}.label{font-size:8pt;font-weight:700;color:#2d2d2d;text-transform:uppercase;line-height:1}.customer-label{position:absolute;left:22mm;top:136pt}.customer-name{position:absolute;left:22mm;top:151pt;font-size:13pt;font-weight:700;color:#111;line-height:1}.date-label{position:absolute;left:405pt;top:133pt}.date-value{position:absolute;left:405pt;top:147pt;font-size:10pt;color:#111;line-height:1}.number-label{position:absolute;left:405pt;top:165pt}.number-value{position:absolute;left:405pt;top:178pt;font-size:8pt;font-weight:700;color:#d4af37;line-height:1}.table-wrap{position:absolute;left:18mm;top:194pt;width:174mm;border-bottom:.5pt solid #ccc}.table-head{position:absolute;left:0;top:0;width:100%;height:26pt;background:#111;border-bottom:1pt solid #d4af37;color:#d4af37;font-size:7.5pt;font-weight:700;text-transform:uppercase;line-height:1}.th{position:absolute;top:10pt;text-align:center;white-space:nowrap}.th:first-child{text-align:left}.doc-row{position:absolute;left:0;width:100%;font-size:9pt;color:#111;line-height:1}.row-light{background:#f2f2f2}.row-white{background:#fff}.td{position:absolute;top:8pt;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.q-model,.i-model,.i-model-disc,.id-model-disc{text-align:left;font-weight:700}.q-total,.i-total,.id-total-disc{font-weight:700;text-align:right}.q-unit,.q-layer,.q-walls,.q-infill,.id-qty-disc{color:#2d2d2d}.id-discount-disc{color:#cc3333}.quote-sub{position:absolute;left:4pt;font-size:7pt;font-style:italic;color:#888;line-height:1}.spec-line{position:absolute;left:4pt;top:21pt}.spec-tag{display:inline-block;background:#2a2200;color:#d4af37;border-radius:2pt;padding:2pt 5pt;font-size:7pt;font-style:italic;line-height:1}.c-model{left:4pt;text-align:left}.c-qty{left:136pt;width:40pt}.c-unit{left:190pt;width:68pt}.c-layer{left:271pt;width:58pt}.c-walls{left:333pt;width:59pt}.c-infill{left:395pt;width:55pt}.c-total{right:4pt;width:64pt}.q-model{left:4pt;width:132pt}.q-qty{left:136pt;width:40pt;font-weight:700}.q-unit{left:190pt;width:68pt;font-size:8pt}.q-layer{left:271pt;width:58pt;font-size:8pt}.q-walls{left:333pt;width:59pt;font-size:8pt}.q-infill{left:395pt;width:55pt;font-size:8pt}.q-total{right:4pt;width:70pt}.i-model{left:4pt;width:220pt}.i-qty{left:245pt;width:40pt;font-weight:700}.i-unit{left:310pt;width:85pt}.i-total{right:4pt;width:90pt}.i-model-disc{left:4pt;width:190pt;text-align:left}.i-qty-disc{left:206pt;width:35pt}.i-unit-disc{left:253pt;width:70pt}.i-discount-disc{left:335pt;width:70pt}.i-total-disc{right:4pt;width:76pt}.id-model-disc{left:4pt;width:190pt}.id-qty-disc{left:206pt;width:35pt}.id-unit-disc{left:253pt;width:70pt}.id-discount-disc{left:335pt;width:70pt}.id-total-disc{right:4pt;width:76pt}.totals{position:absolute;right:18mm;width:90mm}.total-quote,.total-main,.total-balance{height:24pt;background:#d4af37;color:#111;font-size:12pt;font-weight:700;line-height:24pt;padding:0 8pt}.total-quote{display:flex;justify-content:space-between}.total-main,.total-balance,.total-mini{display:flex;justify-content:space-between}.total-mini{height:20pt;color:#111;font-size:9pt;line-height:20pt;padding:0 8pt}.total-mini.red{color:#cc3333}.total-balance{background:#1a5c2a;color:#4ade80}.notes{position:absolute;left:18mm;width:95mm;font-size:8pt;color:#111}.notes b{display:block;color:#2d2d2d;margin-bottom:4pt}.notes span{display:block;margin-bottom:3pt}.footer{position:absolute;left:0;bottom:38pt;width:210mm;height:90pt;background:#111;border-top:2pt solid #d4af37}.footer-title{position:absolute;left:18mm;top:20pt;color:#d4af37;font-size:13pt;font-weight:700}.footer-phone{position:absolute;left:18mm;top:42pt;color:#fff;font-size:8.5pt}.footer-wa{position:absolute;left:18mm;top:56pt;color:#fff;font-size:8.5pt}.footer-motto{position:absolute;left:18mm;top:70pt;color:#ccc;font-size:7.5pt;font-style:italic}.qr{position:absolute;right:18mm;top:14pt;width:68pt;height:68pt}.qr-caption{position:absolute;right:18mm;top:83pt;width:68pt;text-align:center;color:#ccc;font-size:6.5pt}.page-line{position:absolute;left:0;bottom:15pt;width:210mm;text-align:center;font-size:7pt;color:#bbb}
+    @page{size:A4;margin:0}*{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff;color:#111;font-family:Arial,Helvetica,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}.print-btn{position:fixed;right:12px;top:12px;z-index:50;border:0;border-radius:999px;background:#d4af37;color:#111;font-weight:900;padding:10px 16px;box-shadow:0 10px 30px rgba(0,0,0,.25);cursor:pointer}@media print{.print-btn{display:none}.page{margin:0!important;page-break-after:always}.page:last-child{page-break-after:auto}}.page{width:210mm;height:297mm;margin:0 auto;background:#fff;position:relative;overflow:hidden}.header{position:absolute;left:0;top:0;width:210mm;height:110pt;background:#111;border-bottom:2.5pt solid #d4af37}.logo{position:absolute;left:18mm;top:16pt;width:78pt;height:78pt;object-fit:contain}.brand-name{position:absolute;left:139pt;top:22pt;width:180pt;height:46pt;object-fit:contain}.header-motto{position:absolute;left:139pt;top:76pt;width:180pt;text-align:center;font-size:6pt;font-weight:700;letter-spacing:.02em;white-space:nowrap;color:#e8e8e8;line-height:1}.header-motto .gold{color:#d4af37}.doc-title{position:absolute;right:18mm;top:35pt;text-align:right;color:#fff;font-size:20pt;font-weight:700;line-height:1;letter-spacing:.02em}.doc-id-top{position:absolute;right:18mm;top:67pt;text-align:right;color:#d4af37;font-size:9pt;line-height:1}.panel{position:absolute;left:18mm;top:120pt;width:174mm;height:68pt;background:#f2f2f2;border-radius:6pt}.label{font-size:8pt;font-weight:700;color:#2d2d2d;text-transform:uppercase;line-height:1}.customer-label{position:absolute;left:22mm;top:136pt}.customer-name{position:absolute;left:22mm;top:151pt;font-size:13pt;font-weight:700;color:#111;line-height:1}.date-label{position:absolute;left:405pt;top:133pt}.date-value{position:absolute;left:405pt;top:147pt;font-size:10pt;color:#111;line-height:1}.number-label{position:absolute;left:405pt;top:165pt}.number-value{position:absolute;left:405pt;top:178pt;font-size:8pt;font-weight:700;color:#d4af37;line-height:1}.table-wrap{position:absolute;left:18mm;top:194pt;width:174mm;border-bottom:.5pt solid #ccc}.table-head{position:absolute;left:0;top:0;width:100%;height:26pt;background:#111;border-bottom:1pt solid #d4af37;color:#d4af37;font-size:7.5pt;font-weight:700;text-transform:uppercase;line-height:1}.th{position:absolute;top:10pt;text-align:center;white-space:nowrap}.th:first-child{text-align:left}.doc-row{position:absolute;left:0;width:100%;font-size:9pt;color:#111;line-height:1}.row-light{background:#f2f2f2}.row-white{background:#fff}.td{position:absolute;top:8pt;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.q-model,.i-model,.i-model-disc,.id-model-disc{text-align:left;font-weight:700}.q-total,.i-total,.id-total-disc{font-weight:700;text-align:right}.q-unit,.q-layer,.q-walls,.q-infill,.id-qty-disc{color:#2d2d2d}.id-discount-disc{color:#cc3333}.quote-sub{position:absolute;left:4pt;font-size:7pt;font-style:italic;color:#888;line-height:1}.spec-line{position:absolute;left:4pt;top:21pt}.spec-tag{display:inline-block;background:#2a2200;color:#d4af37;border-radius:2pt;padding:2pt 5pt;font-size:7pt;font-style:italic;line-height:1}.c-model{left:4pt;text-align:left}.c-qty{left:136pt;width:40pt}.c-unit{left:190pt;width:68pt}.c-layer{left:271pt;width:58pt}.c-walls{left:333pt;width:59pt}.c-infill{left:395pt;width:55pt}.c-total{right:4pt;width:64pt}.q-model{left:4pt;width:132pt}.q-qty{left:136pt;width:40pt;font-weight:700}.q-unit{left:190pt;width:68pt;font-size:8pt}.q-layer{left:271pt;width:58pt;font-size:8pt}.q-walls{left:333pt;width:59pt;font-size:8pt}.q-infill{left:395pt;width:55pt;font-size:8pt}.q-total{right:4pt;width:70pt}.q-model-disc{left:4pt;width:112pt}.q-qty-disc{left:117pt;width:34pt;font-weight:700}.q-unit-disc{left:160pt;width:60pt;font-size:8pt}.q-discount-disc{left:225pt;width:60pt;font-size:8pt;color:#cc3333}.q-layer-disc{left:290pt;width:44pt;font-size:8pt}.q-walls-disc{left:337pt;width:44pt;font-size:8pt}.q-infill-disc{left:384pt;width:44pt;font-size:8pt}.q-total-disc{right:4pt;width:54pt;font-weight:700;text-align:right}.i-model{left:4pt;width:220pt}.i-qty{left:245pt;width:40pt;font-weight:700}.i-unit{left:310pt;width:85pt}.i-total{right:4pt;width:90pt}.i-model-disc{left:4pt;width:190pt;text-align:left}.i-qty-disc{left:206pt;width:35pt}.i-unit-disc{left:253pt;width:70pt}.i-discount-disc{left:335pt;width:70pt}.i-total-disc{right:4pt;width:76pt}.id-model-disc{left:4pt;width:190pt}.id-qty-disc{left:206pt;width:35pt}.id-unit-disc{left:253pt;width:70pt}.id-discount-disc{left:335pt;width:70pt}.id-total-disc{right:4pt;width:76pt}.totals{position:absolute;right:18mm;width:90mm}.total-quote,.total-main,.total-balance{height:24pt;background:#d4af37;color:#111;font-size:12pt;font-weight:700;line-height:24pt;padding:0 8pt}.total-quote{display:flex;justify-content:space-between}.total-main,.total-balance,.total-mini{display:flex;justify-content:space-between}.total-mini{height:20pt;color:#111;font-size:9pt;line-height:20pt;padding:0 8pt}.total-mini.red{color:#cc3333}.total-balance{background:#1a5c2a;color:#4ade80}.notes{position:absolute;left:18mm;width:95mm;font-size:8pt;color:#111}.notes b{display:block;color:#2d2d2d;margin-bottom:4pt}.notes span{display:block;margin-bottom:3pt}.footer{position:absolute;left:0;bottom:38pt;width:210mm;height:90pt;background:#111;border-top:2pt solid #d4af37}.footer-title{position:absolute;left:18mm;top:20pt;color:#d4af37;font-size:13pt;font-weight:700}.footer-phone{position:absolute;left:18mm;top:42pt;color:#fff;font-size:8.5pt}.footer-wa{position:absolute;left:18mm;top:56pt;color:#fff;font-size:8.5pt}.footer-motto{position:absolute;left:18mm;top:70pt;color:#ccc;font-size:7.5pt;font-style:italic}.qr{position:absolute;right:18mm;top:14pt;width:68pt;height:68pt}.qr-caption{position:absolute;right:18mm;top:83pt;width:68pt;text-align:center;color:#ccc;font-size:6.5pt}.page-line{position:absolute;left:0;bottom:15pt;width:210mm;text-align:center;font-size:7pt;color:#bbb}
   </style></head><body><button class="print-btn" onclick="window.print()">Print / Save PDF</button>${pagesHtml}<script>window.onload = () => setTimeout(() => window.print(), 350);</script></body></html>`;
   const win = window.open('', '_blank');
   win.document.write(html);
@@ -2417,6 +2445,380 @@ async function importDesktopSqlite(file) {
   }
 }
 
+/* --------------------------------------------------------------------------
+ * Reports & Analytics — mirrors Desktop v2.9.3 report logic
+ * -------------------------------------------------------------------------- */
+const REPORT_PRESETS = ['Today','Yesterday','This Week','Last 7 Days','This Month','Last 30 Days','This Year','Custom'];
+
+function reportNum(value) {
+  const n = Number.parseFloat(String(value ?? '').replace(/,/g, ''));
+  return Number.isFinite(n) ? n : 0;
+}
+
+function reportMoney(value) {
+  const n = Math.ceil(reportNum(value));
+  return `Rs ${n.toLocaleString('en-LK', { maximumFractionDigits: 0 })}`;
+}
+
+function reportDate(value) {
+  const text = String(value ?? '').trim();
+  if (!text) return null;
+  const direct = text.match(/^(\d{4})-(\d{1,2})-(\d{1,2})/);
+  if (direct) {
+    const d = new Date(Number(direct[1]), Number(direct[2]) - 1, Number(direct[3]));
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  const slash = text.match(/^(\d{4})\/(\d{1,2})\/(\d{1,2})/);
+  if (slash) {
+    const d = new Date(Number(slash[1]), Number(slash[2]) - 1, Number(slash[3]));
+    return Number.isNaN(d.getTime()) ? null : d;
+  }
+  const named = new Date(text);
+  if (!Number.isNaN(named.getTime())) {
+    return new Date(named.getFullYear(), named.getMonth(), named.getDate());
+  }
+  return null;
+}
+
+function reportISO(date) {
+  const d = date instanceof Date ? date : new Date(date);
+  const y = d.getFullYear();
+  const m = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${y}-${m}-${day}`;
+}
+
+function reportDaysBetween(a, b) {
+  const out = [];
+  const cur = new Date(a);
+  while (cur <= b) {
+    out.push(new Date(cur));
+    cur.setDate(cur.getDate() + 1);
+  }
+  return out;
+}
+
+function reportAddDays(date, days) {
+  const d = new Date(date);
+  d.setDate(d.getDate() + days);
+  return d;
+}
+
+function reportStartOfWeek(date) {
+  const d = new Date(date);
+  const day = d.getDay();
+  const mondayOffset = day === 0 ? -6 : 1 - day;
+  return reportAddDays(d, mondayOffset);
+}
+
+function reportEndOfMonth(date) {
+  return new Date(date.getFullYear(), date.getMonth() + 1, 0);
+}
+
+function reportFmtTime(minutes) {
+  const total = Math.max(0, Math.round(reportNum(minutes)));
+  const hours = Math.floor(total / 60);
+  const mins = total % 60;
+  return `${hours}h ${mins}m`;
+}
+
+function reportBucket(date, group) {
+  if (group === 'Overall') return 'Selected Period';
+  if (group === 'Daily') return reportISO(date);
+  if (group === 'Monthly') return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}`;
+  const start = reportStartOfWeek(date);
+  const end = reportAddDays(start, 6);
+  return `${reportISO(start)} to ${reportISO(end)}`;
+}
+
+function reportPeriods(from, to, group) {
+  if (group === 'Overall') return [{ label: 'Selected Period', from: new Date(from), to: new Date(to) }];
+  const keys = [...new Set(reportDaysBetween(from, to).map(d => reportBucket(d, group)))].sort();
+  return keys.map(key => {
+    if (group === 'Daily') {
+      const d = reportDate(key);
+      return { label: key, from: d, to: d };
+    }
+    if (group === 'Monthly') {
+      const [y, m] = key.split('-').map(Number);
+      const d = new Date(y, m - 1, 1);
+      return { label: key, from: d, to: reportEndOfMonth(d) };
+    }
+    const d = reportDate(key.slice(0, 10));
+    return { label: key, from: d, to: reportAddDays(d, 6) };
+  });
+}
+
+function reportRecordDate(record, dateKey, fallbackKey) {
+  return reportDate(record?.[dateKey] || record?.[fallbackKey]);
+}
+
+function reportInRange(record, dateKey, fallbackKey, from, to) {
+  const d = reportRecordDate(record, dateKey, fallbackKey);
+  return !!d && d >= from && d <= to;
+}
+
+function reportConfig() {
+  normalizeMaterialProfiles(db);
+  const profileName = selectedMaterialProfileName();
+  const profile = db.materialProfiles?.[profileName] || db.config || {};
+  return { power: reportNum(profile.W ?? db.config?.W), rate: reportNum(profile.R ?? db.config?.R) };
+}
+
+function websiteReportData() {
+  const from = reportDate($('#reportFrom')?.value);
+  const to = reportDate($('#reportTo')?.value);
+  if (!from || !to) throw new Error('Please select valid From and To dates.');
+  if (from > to) throw new Error('From date cannot be after To date.');
+
+  const items = (db.itemRecords || []).filter(r => reportInRange(r, 'datePrinted', 'createdAt', from, to));
+  const orders = (db.orders || []).filter(r => reportInRange(r, 'datePrinted', 'createdAt', from, to));
+  const budget = (db.budget || []).filter(r => reportInRange(r, 'entryDate', 'createdAt', from, to));
+  const cfg = reportConfig();
+
+  const enrichedItems = items.map(r => {
+    const mins = reportNum(r.printTimeMinutes);
+    const ec = reportNum(r.electricityCost);
+    const storedKwh = reportNum(r.electricityUnitsKwh ?? r.electricityKwh ?? r.kwh);
+    const kwh = storedKwh || (cfg.power > 0 ? mins * cfg.power / 60000 : (cfg.rate > 0 ? ec / cfg.rate : 0));
+    return {
+      ...r,
+      _mins: mins,
+      _kwh: kwh,
+      _ec: ec,
+      _filament: reportNum(r.filamentCost),
+      _cost: reportNum(r.totalCost),
+      _weight: reportNum(r.weightG),
+      _failed: String(r.status || 'Success').toLowerCase() === 'failed'
+    };
+  });
+
+  const group = $('#reportGroup')?.value || 'Daily';
+  const periods = reportPeriods(from, to, group);
+  const rows = periods.map(period => {
+    const pi = enrichedItems.filter(r => {
+      const d = reportRecordDate(r, 'datePrinted', 'createdAt');
+      return d && d >= period.from && d <= period.to;
+    });
+    const po = orders.filter(r => {
+      const d = reportRecordDate(r, 'datePrinted', 'createdAt');
+      return d && d >= period.from && d <= period.to;
+    });
+    const pg = budget.filter(r => {
+      const d = reportRecordDate(r, 'entryDate', 'createdAt');
+      return d && d >= period.from && d <= period.to;
+    });
+    const failed = pi.filter(r => r._failed).length;
+    const successful = pi.length - failed;
+    const mins = pi.reduce((s, r) => s + r._mins, 0);
+    const kwh = pi.reduce((s, r) => s + r._kwh, 0);
+    const electricity = pi.reduce((s, r) => s + r._ec, 0);
+    const filament = pi.reduce((s, r) => s + r._filament, 0);
+    const cost = pi.reduce((s, r) => s + r._cost, 0);
+    const sales = po.reduce((s, r) => s + reportNum(r.price), 0);
+    const income = pg.filter(r => String(r.entryType || '').toLowerCase() === 'income').reduce((s, r) => s + reportNum(r.amount), 0);
+    const expenses = pg.filter(r => String(r.entryType || '').toLowerCase() === 'expense').reduce((s, r) => s + reportNum(r.amount), 0);
+    const profit = po.reduce((s, r) => s + reportNum(r.profit), 0);
+    const net = income - expenses;
+    return { period: period.label, items: successful, failed, mins, kwh, ec: electricity, filament, cost, sales, income, expenses, profit, net };
+  });
+
+  const totals = ['items','failed','mins','kwh','ec','filament','cost','sales','income','expenses','profit','net'].reduce((acc, key) => {
+    acc[key] = rows.reduce((s, r) => s + reportNum(r[key]), 0);
+    return acc;
+  }, {});
+  totals.weight = enrichedItems.reduce((s, r) => s + r._weight, 0);
+  totals.successAttempts = enrichedItems.length;
+  totals.failed = enrichedItems.filter(r => r._failed).length;
+  totals.items = enrichedItems.length - totals.failed;
+  return { from, to, group, rows, totals };
+}
+
+function reportSetPresetRange(preset) {
+  const today = new Date();
+  const t = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  let from = t;
+  let to = t;
+  if (preset === 'Yesterday') { from = reportAddDays(t, -1); to = from; }
+  else if (preset === 'This Week') { from = reportStartOfWeek(t); }
+  else if (preset === 'Last 7 Days') { from = reportAddDays(t, -6); }
+  else if (preset === 'This Month') { from = new Date(t.getFullYear(), t.getMonth(), 1); }
+  else if (preset === 'Last 30 Days') { from = reportAddDays(t, -29); }
+  else if (preset === 'This Year') { from = new Date(t.getFullYear(), 0, 1); }
+  else if (preset === 'Custom') return;
+  $('#reportFrom').value = reportISO(from);
+  $('#reportTo').value = reportISO(to);
+}
+
+function reportEscapeHtml(value) {
+  return String(value ?? '').replace(/[&<>'"]/g, ch => ({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[ch]));
+}
+
+function reportRenderTable(result) {
+  const body = $('#reportBody');
+  const foot = $('#reportFoot');
+  if (!body || !foot) return;
+  body.innerHTML = result.rows.map(r => `<tr>
+    <td>${reportEscapeHtml(r.period)}</td><td>${r.items.toLocaleString('en-LK')}</td><td>${r.failed.toLocaleString('en-LK')}</td>
+    <td>${reportEscapeHtml(reportFmtTime(r.mins))}</td><td>${r.kwh.toFixed(3)}</td><td>${reportMoney(r.ec)}</td>
+    <td>${reportMoney(r.filament)}</td><td>${reportMoney(r.cost)}</td><td>${reportMoney(r.sales)}</td>
+    <td>${reportMoney(r.income)}</td><td>${reportMoney(r.expenses)}</td><td>${reportMoney(r.profit)}</td><td>${reportMoney(r.net)}</td>
+  </tr>`).join('') || '<tr><td colspan="13" class="muted">No records found for this period.</td></tr>';
+  const t = result.totals;
+  foot.innerHTML = `<tr>
+    <td>TOTAL</td><td>${t.items.toLocaleString('en-LK')}</td><td>${t.failed.toLocaleString('en-LK')}</td>
+    <td>${reportFmtTime(t.mins)}</td><td>${t.kwh.toFixed(3)}</td><td>${reportMoney(t.ec)}</td>
+    <td>${reportMoney(t.filament)}</td><td>${reportMoney(t.cost)}</td><td>${reportMoney(t.sales)}</td>
+    <td>${reportMoney(t.income)}</td><td>${reportMoney(t.expenses)}</td><td>${reportMoney(t.profit)}</td><td>${reportMoney(t.net)}</td>
+  </tr>`;
+}
+
+function reportSetSummary(result) {
+  const t = result.totals;
+  const set = (id, value) => { const el = $(`#${id}`); if (el) el.textContent = value; };
+  set('reportItems', t.items.toLocaleString('en-LK'));
+  set('reportFailed', t.failed.toLocaleString('en-LK'));
+  set('reportTime', reportFmtTime(t.mins));
+  set('reportKwh', `${t.kwh.toFixed(3)} kWh`);
+  set('reportElectricity', reportMoney(t.ec));
+  set('reportProductionCost', reportMoney(t.cost));
+  set('reportSales', reportMoney(t.sales));
+  set('reportIncome', reportMoney(t.income));
+  set('reportExpenses', reportMoney(t.expenses));
+  set('reportProfit', reportMoney(t.profit));
+  set('reportNet', reportMoney(t.net));
+  set('reportFilament', `${t.weight.toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 })} g`);
+}
+
+let lastWebsiteReport = null;
+function generateWebsiteReport(showError = true) {
+  try {
+    if (!$('#reportFrom') || !$('#reportTo') || !$('#reportGroup')) return null;
+    const result = websiteReportData();
+    lastWebsiteReport = result;
+    reportSetSummary(result);
+    reportRenderTable(result);
+    $('#reportTableTitle').textContent = `${result.from.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' })} – ${result.to.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' })} · ${result.group}`;
+    $('#reportRowCount').textContent = `${result.rows.length} row${result.rows.length === 1 ? '' : 's'}`;
+    $('#reportStatus').textContent = `${result.from.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' })} → ${result.to.toLocaleDateString('en-GB', { day:'2-digit', month:'short', year:'numeric' })} • ${result.group}`;
+    return result;
+  } catch (err) {
+    lastWebsiteReport = null;
+    if ($('#reportStatus')) $('#reportStatus').textContent = `Report error: ${err.message || err}`;
+    if ($('#reportBody')) $('#reportBody').innerHTML = '<tr><td colspan="13" class="muted">Unable to generate report.</td></tr>';
+    if (showError) alert(err.message || err);
+    return null;
+  }
+}
+
+function reportCsvValue(value) {
+  return `"${String(value ?? '').replace(/"/g, '""')}"`;
+}
+
+function downloadWebsiteReportCsv() {
+  const result = generateWebsiteReport(false);
+  if (!result) return alert('Generate a valid report first.');
+  const t = result.totals;
+  const lines = [
+    ['TRINI-D BUSINESS REPORT'].map(reportCsvValue).join(','),
+    [ 'From', reportISO(result.from), 'To', reportISO(result.to), 'Group', result.group ].map(reportCsvValue).join(','),
+    '',
+    ['Period','Successful Items','Failed Prints','Print Time (hours)','kWh','Electricity Cost','Filament Cost','Total Production Cost','Order Sales','Budget Income','Budget Expenses','Order Profit','Net Budget'].map(reportCsvValue).join(','),
+    ...result.rows.map(r => [r.period,r.items,r.failed,reportFmtTime(r.mins),r.kwh.toFixed(3),r.ec.toFixed(2),r.filament.toFixed(2),r.cost.toFixed(2),r.sales.toFixed(2),r.income.toFixed(2),r.expenses.toFixed(2),r.profit.toFixed(2),r.net.toFixed(2)].map(reportCsvValue).join(',')),
+    ['TOTAL',t.items,t.failed,reportFmtTime(t.mins),t.kwh.toFixed(3),t.ec.toFixed(2),t.filament.toFixed(2),t.cost.toFixed(2),t.sales.toFixed(2),t.income.toFixed(2),t.expenses.toFixed(2),t.profit.toFixed(2),t.net.toFixed(2)].map(reportCsvValue).join(',')
+  ];
+  downloadText(`TriniD_Report_${reportISO(result.from)}_${reportISO(result.to)}.csv`, lines.join('\n'), 'text/csv;charset=utf-8');
+}
+
+function reportPdfNode(result) {
+  const t = result.totals;
+  const tableRows = result.rows.map(r => `<tr>
+    <td>${reportEscapeHtml(r.period)}</td><td>${r.items}</td><td>${r.failed}</td><td>${reportEscapeHtml(reportFmtTime(r.mins))}</td><td>${r.kwh.toFixed(3)}</td>
+    <td>${reportMoney(r.ec)}</td><td>${reportMoney(r.filament)}</td><td>${reportMoney(r.cost)}</td><td>${reportMoney(r.sales)}</td>
+    <td>${reportMoney(r.income)}</td><td>${reportMoney(r.expenses)}</td><td>${reportMoney(r.profit)}</td><td>${reportMoney(r.net)}</td>
+  </tr>`).join('');
+  const node = document.createElement('div');
+  node.id = 'trinid-report-pdf';
+  node.style.cssText = 'position:fixed;left:-100000px;top:0;width:1120px;background:#fff;color:#111;padding:28px;font-family:Arial,Helvetica,sans-serif;z-index:-1;';
+  node.innerHTML = `
+    <div style="display:flex;justify-content:space-between;align-items:flex-start;border-bottom:4px solid #d6a62b;padding-bottom:14px;margin-bottom:16px">
+      <div><div style="font-size:26px;font-weight:900;color:#111">TRINI-D</div><div style="font-size:11px;color:#666;font-weight:700">Three Dimensions - Endless Possibilities</div></div>
+      <div style="text-align:right"><div style="font-size:22px;font-weight:900;color:#111">BUSINESS REPORT</div><div style="font-size:11px;color:#555;margin-top:4px">${reportISO(result.from)} to ${reportISO(result.to)} · ${reportEscapeHtml(result.group)}</div></div>
+    </div>
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:8px;margin-bottom:16px">
+      ${[
+        ['ITEMS PRINTED',t.items.toLocaleString('en-LK')],['FAILED PRINTS',t.failed.toLocaleString('en-LK')],['TOTAL PRINT TIME',reportFmtTime(t.mins)],['ELECTRICITY UNITS',`${t.kwh.toFixed(3)} kWh`],
+        ['ELECTRICITY COST',reportMoney(t.ec)],['TOTAL COST',reportMoney(t.cost)],['ORDER SALES',reportMoney(t.sales)],['TOTAL INCOME',reportMoney(t.income)],
+        ['TOTAL OUTCOME',reportMoney(t.expenses)],['TOTAL PROFIT',reportMoney(t.profit)],['NET BALANCE',reportMoney(t.net)],['FILAMENT',`${t.weight.toLocaleString('en-LK',{minimumFractionDigits:2,maximumFractionDigits:2})} g`]
+      ].map(([label,value]) => `<div style="border:1px solid #d9d9d9;border-radius:8px;padding:10px 12px;background:#f6f6f6"><div style="font-size:9px;font-weight:900;color:#666;letter-spacing:.08em">${label}</div><div style="font-size:17px;font-weight:900;color:#111;margin-top:5px">${value}</div></div>`).join('')}
+    </div>
+    <div style="font-size:12px;font-weight:900;color:#111;border-left:5px solid #d6a62b;padding-left:8px;margin:12px 0 8px">SELECTED PERIOD DATA</div>
+    <table style="width:100%;border-collapse:collapse;font-size:8.2px">
+      <thead><tr>${['Period','Items','Failed','Print Time','kWh','Electricity','Filament','Total Cost','Sales','Income','Outcome','Profit','Net'].map(h => `<th style="background:#111;color:#d6a62b;padding:7px 4px;border:1px solid #333;text-align:center">${h}</th>`).join('')}</tr></thead>
+      <tbody>${tableRows || `<tr><td colspan="13" style="padding:8px;border:1px solid #ccc;text-align:center">No records found for this period.</td></tr>`}</tbody>
+      <tfoot><tr>${[
+        'TOTAL', t.items.toLocaleString('en-LK'), t.failed.toLocaleString('en-LK'), reportFmtTime(t.mins), t.kwh.toFixed(3), reportMoney(t.ec), reportMoney(t.filament), reportMoney(t.cost), reportMoney(t.sales), reportMoney(t.income), reportMoney(t.expenses), reportMoney(t.profit), reportMoney(t.net)
+      ].map(v => `<td style="padding:7px 4px;border:1px solid #c7a63a;background:#fff0bf;font-weight:900;text-align:center">${v}</td>`).join('')}</tr></tfoot>
+    </table>
+    <div style="margin-top:12px;font-size:9px;color:#666;line-height:1.45">Print time is shown in hours and minutes. Electricity units use stored per-item kWh when available; otherwise the report derives kWh from print time and the active calculator power setting, with stored electricity cost/rate as a fallback.</div>
+    <div style="margin-top:18px;padding-top:8px;border-top:1px solid #ddd;font-size:8px;color:#777;display:flex;justify-content:space-between"><span>TRINI-D 3D Printing · Three Dimensions - Endless Possibilities</span><span>Generated ${new Date().toLocaleString('en-GB')}</span></div>
+  `;
+  document.body.appendChild(node);
+  return node;
+}
+
+async function downloadWebsiteReportPdf() {
+  const result = generateWebsiteReport(false);
+  if (!result) return alert('Generate a valid report first.');
+  if (typeof window.html2pdf !== 'function') {
+    // Browser-native fallback when the PDF helper CDN is unavailable.
+    const node = reportPdfNode(result);
+    const popup = window.open('', '_blank');
+    if (!popup) { node.remove(); return alert('Please allow pop-ups to download/print the PDF report.'); }
+    popup.document.write(`<html><head><title>Trini-D Business Report</title></head><body>${node.innerHTML}</body></html>`);
+    popup.document.close();
+    popup.focus();
+    setTimeout(() => popup.print(), 400);
+    node.remove();
+    return;
+  }
+  const node = reportPdfNode(result);
+  try {
+    await window.html2pdf().set({
+      margin: 8,
+      filename: `TriniD_Report_${reportISO(result.from)}_${reportISO(result.to)}.pdf`,
+      image: { type: 'jpeg', quality: 0.96 },
+      html2canvas: { scale: 2, useCORS: true, backgroundColor: '#ffffff' },
+      jsPDF: { unit: 'mm', format: 'a4', orientation: 'landscape' },
+      pagebreak: { mode: ['css', 'legacy'] }
+    }).from(node).save();
+  } catch (err) {
+    console.error(err);
+    alert(`Could not generate the PDF report: ${err.message || err}`);
+  } finally {
+    node.remove();
+  }
+}
+
+function initReports() {
+  const preset = $('#reportPreset');
+  const today = new Date();
+  if (!$('#reportFrom') || !$('#reportTo') || !$('#reportGroup') || !preset) return;
+  $('#reportFrom').value = reportISO(new Date(today.getFullYear(), today.getMonth(), 1));
+  $('#reportTo').value = reportISO(today);
+  preset.addEventListener('change', () => {
+    reportSetPresetRange(preset.value);
+    if (preset.value !== 'Custom') generateWebsiteReport();
+  });
+  $('#reportFrom').addEventListener('change', () => { preset.value = 'Custom'; });
+  $('#reportTo').addEventListener('change', () => { preset.value = 'Custom'; });
+  $('#reportGroup').addEventListener('change', () => generateWebsiteReport());
+  $('#generateReportBtn').addEventListener('click', () => generateWebsiteReport());
+  $('#downloadReportPdfBtn').addEventListener('click', downloadWebsiteReportPdf);
+  $('#downloadReportCsvBtn').addEventListener('click', downloadWebsiteReportCsv);
+  generateWebsiteReport(false);
+}
+
 function initSettings() {
   renderSmartQuoteConfig(true);
   const sqMarginInput = $('#smartQuoteProfitMargin');
@@ -2471,6 +2873,7 @@ function renderAll() {
   renderDatabaseSummary();
   renderDatabaseTable();
   renderBudget();
+  if ($('#section-reports')?.classList.contains('active')) generateWebsiteReport(false);
 }
 
 function init() {
@@ -2483,6 +2886,7 @@ function init() {
   initBillQuote();
   initDatabase();
   initBudget();
+  initReports();
   initSettings();
   renderAll();
 }

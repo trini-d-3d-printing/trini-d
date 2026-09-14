@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="../styles.css?v=43" />
-  <link rel="stylesheet" href="admin.css?v=43" />
+  <link rel="stylesheet" href="admin.css?v=47" />
 </head>
 <body class="admin-body">
   <div class="admin-login" id="adminLogin">
@@ -46,6 +46,7 @@
         <button class="admin-nav-link" data-section="quotation">Quotations</button>
         <button class="admin-nav-link" data-section="bill">Bills / Invoices</button>
         <button class="admin-nav-link" data-section="database">Database</button>
+        <button class="admin-nav-link" data-section="reports">Reports</button>
         <button class="admin-nav-link" data-section="budget">Budget</button>
         <button class="admin-nav-link" data-section="settings">Export / Settings</button>
       </nav>
@@ -172,9 +173,10 @@
               <div><span>Total Weight</span><b id="quoteTotalWeight">0.00 g</b></div>
               <div><span>Total Printing Time</span><b id="quoteTotalTime">0m</b></div>
               <div><span>Service Charge</span><b id="quoteServiceTotal">Rs 0</b></div>
+              <div><span>Discount</span><b id="quoteDiscount">Rs 0</b></div>
               <div><span>Quotation Total</span><b id="quoteGrandTotal">Rs 0</b></div>
             </div>
-            <div class="table-wrap line-editor"><table><thead><tr><th>Model</th><th>Material</th><th>Color</th><th>Qty</th><th>Unit Price</th><th>Layer</th><th>Walls</th><th>Infill</th><th>Weight</th><th>Print Time</th><th></th></tr></thead><tbody id="quoteItemsBody"></tbody></table></div>
+            <div class="table-wrap line-editor"><table><thead><tr><th>Model</th><th>Material</th><th>Color</th><th>Qty</th><th>Unit Price</th><th>Discount</th><th>Layer</th><th>Walls</th><th>Infill</th><th>Weight</th><th>Print Time</th><th></th></tr></thead><tbody id="quoteItemsBody"></tbody></table></div>
             <div class="admin-actions"><button class="btn ghost" id="addQuoteRowBtn" type="button">+ Add Item</button><button class="btn ghost" id="addCalcQuoteBtn" type="button">Add Calculator Result</button><button class="btn ghost" id="resetQuoteBtn" type="button">Reset Quotation</button></div>
             <div class="form-grid admin-form-grid two feature-grid">
               <label class="field"><span>Design / Other Service Name</span><input id="quoteServiceName" type="text" placeholder="Model design / Other service" value="Model Design / Other Service"></label>
@@ -254,6 +256,102 @@
         </div>
       </section>
 
+      <section class="admin-section" id="section-reports">
+        <div class="admin-card reports-card">
+          <div class="card-title">
+            <span class="eyebrow">Reports & Analytics</span>
+            <h2>Business Performance Report</h2>
+            <p class="muted">Generate an overall or daily/weekly/monthly summary for any selected time period, matching the desktop report.</p>
+          </div>
+
+          <div class="reports-toolbar">
+            <div class="report-control">
+              <label for="reportPreset">Preset</label>
+              <select id="reportPreset">
+                <option>Today</option>
+                <option>Yesterday</option>
+                <option>This Week</option>
+                <option>Last 7 Days</option>
+                <option selected>This Month</option>
+                <option>Last 30 Days</option>
+                <option>This Year</option>
+                <option>Custom</option>
+              </select>
+            </div>
+            <div class="report-control">
+              <label for="reportFrom">From</label>
+              <input id="reportFrom" type="date" />
+            </div>
+            <div class="report-control">
+              <label for="reportTo">To</label>
+              <input id="reportTo" type="date" />
+            </div>
+            <div class="report-control">
+              <label for="reportGroup">Group</label>
+              <select id="reportGroup">
+                <option>Overall</option>
+                <option selected>Daily</option>
+                <option>Weekly</option>
+                <option>Monthly</option>
+              </select>
+            </div>
+            <div class="report-action-group">
+              <button class="btn primary" id="generateReportBtn" type="button">Generate</button>
+              <button class="btn ghost" id="downloadReportPdfBtn" type="button">Download PDF</button>
+              <button class="btn ghost" id="downloadReportCsvBtn" type="button">Download CSV</button>
+            </div>
+          </div>
+          <p class="report-status muted" id="reportStatus">Ready.</p>
+
+          <div class="report-summary-grid" id="reportSummaryGrid">
+            <article class="report-summary-card"><span>Successful Items</span><b id="reportItems">0</b></article>
+            <article class="report-summary-card"><span>Failed Prints</span><b id="reportFailed">0</b></article>
+            <article class="report-summary-card"><span>Print Time</span><b id="reportTime">0h 0m</b></article>
+            <article class="report-summary-card"><span>Electricity Units</span><b id="reportKwh">0.000 kWh</b></article>
+            <article class="report-summary-card"><span>Electricity Cost</span><b id="reportElectricity">Rs 0</b></article>
+            <article class="report-summary-card"><span>Total Cost</span><b id="reportProductionCost">Rs 0</b></article>
+            <article class="report-summary-card"><span>Order Sales</span><b id="reportSales">Rs 0</b></article>
+            <article class="report-summary-card"><span>Total Income</span><b id="reportIncome">Rs 0</b></article>
+            <article class="report-summary-card"><span>Total Outcome</span><b id="reportExpenses">Rs 0</b></article>
+            <article class="report-summary-card"><span>Total Profit</span><b id="reportProfit">Rs 0</b></article>
+            <article class="report-summary-card"><span>Net Balance</span><b id="reportNet">Rs 0</b></article>
+            <article class="report-summary-card"><span>Filament</span><b id="reportFilament">0.00 g</b></article>
+          </div>
+
+          <div class="report-table-heading">
+            <div>
+              <span class="eyebrow">Selected Data</span>
+              <h3 id="reportTableTitle">This Month · Daily</h3>
+            </div>
+            <span class="report-row-count" id="reportRowCount">0 rows</span>
+          </div>
+          <div class="table-wrap report-table-wrap">
+            <table class="report-table">
+              <thead>
+                <tr>
+                  <th>Period</th>
+                  <th>Items</th>
+                  <th>Failed</th>
+                  <th>Print Time (h)</th>
+                  <th>kWh</th>
+                  <th>Electricity</th>
+                  <th>Filament</th>
+                  <th>Total Cost</th>
+                  <th>Sales</th>
+                  <th>Income</th>
+                  <th>Outcome</th>
+                  <th>Profit</th>
+                  <th>Net</th>
+                </tr>
+              </thead>
+              <tbody id="reportBody"></tbody>
+              <tfoot id="reportFoot"></tfoot>
+            </table>
+          </div>
+          <p class="report-footnote">Print time is shown as hours and minutes. Electricity units use a stored per-item kWh value when available; otherwise the report derives kWh from print time and the active calculator power setting, with stored electricity cost/rate as a fallback.</p>
+        </div>
+      </section>
+
       <section class="admin-section" id="section-budget">
         <div class="admin-grid budget-full-grid">
           <article class="admin-card budget-form-card">
@@ -320,11 +418,12 @@
       </section>
     </main>
   </div>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/html2pdf.js/0.10.1/html2pdf.bundle.min.js"></script>
   <script src="https://cdnjs.cloudflare.com/ajax/libs/sql.js/1.10.3/sql-wasm.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-app-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
   <script src="firebase-config.js"></script>
-  <script src="admin.js?v=43"></script>
+  <script src="admin.js?v=47"></script>
 </body>
 </html>
