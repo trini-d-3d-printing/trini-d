@@ -182,8 +182,12 @@
               <label class="field"><span>Design / Other Service Name</span><input id="quoteServiceName" type="text" placeholder="Model design / Other service" value="Model Design / Other Service"></label>
               <label class="field"><span>Design / Other Service Price Rs</span><input id="quoteServiceCharge" type="text" inputmode="decimal" value="0"></label>
             </div>
-            <div class="feature-options">
-              <label class="check-field"><input id="quoteShowCustomerSpecs" type="checkbox"> <span>Show weight and printing time in customer PDF</span></label>
+            <div class="feature-options quote-description-options">
+              <div class="feature-options-title">Customer PDF Item Description</div>
+              <label class="check-field"><input id="quoteShowMaterial" type="checkbox" checked> <span>Show material</span></label>
+              <label class="check-field"><input id="quoteShowColor" type="checkbox" checked> <span>Show color</span></label>
+              <label class="check-field"><input id="quoteShowWeight" type="checkbox" checked> <span>Show weight</span></label>
+              <label class="check-field"><input id="quoteShowPrintTime" type="checkbox" checked> <span>Show printing time</span></label>
               <label class="check-field"><input id="quoteUseCustomerFileName" type="checkbox"> <span>Add customer name to PDF file name</span></label>
             </div>
             <label class="field"><span>Notes optional</span><textarea id="quoteNotes" rows="3" placeholder="Validity, delivery, conditions..."></textarea></label>
@@ -424,6 +428,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
   <script src="firebase-config.js"></script>
-  <script src="admin.js?v=50"></script>
+  <script src="admin.js?v=51"></script>
 </body>
 </html>
