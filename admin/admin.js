@@ -570,7 +570,7 @@ function initAuth() {
       alert(`Firebase login failed: ${err.message || err}`);
     }
   });
-  $('#logoutBtn').textContent = 'Sign Out';
+  { const logoutLabel = $('#logoutBtn .nav-label'); if (logoutLabel) logoutLabel.textContent = 'Sign Out'; else $('#logoutBtn').textContent = 'Sign Out'; $('#logoutBtn').title = 'Sign Out'; }
   $('#logoutBtn').addEventListener('click', async () => {
     if (firebaseAuth) await firebaseAuth.signOut();
     showLogin();
@@ -578,7 +578,29 @@ function initAuth() {
   });
 }
 
+const SIDEBAR_KEY = 'trinid-admin-sidebar';
+function applySidebarState(collapsed) {
+  const shell = $('#adminShell');
+  if (!shell) return;
+  shell.classList.toggle('sidebar-collapsed', collapsed);
+  const btn = $('#sidebarToggle');
+  if (btn) {
+    const text = collapsed ? 'Expand sidebar' : 'Minimize sidebar';
+    btn.setAttribute('aria-expanded', String(!collapsed));
+    btn.setAttribute('aria-label', text);
+    btn.title = text;
+  }
+  try { localStorage.setItem(SIDEBAR_KEY, collapsed ? 'collapsed' : 'expanded'); } catch (e) {}
+}
+function initSidebarToggle() {
+  let collapsed = false;
+  try { collapsed = localStorage.getItem(SIDEBAR_KEY) === 'collapsed'; } catch (e) {}
+  applySidebarState(collapsed);
+  $('#sidebarToggle')?.addEventListener('click', () => applySidebarState(!$('#adminShell').classList.contains('sidebar-collapsed')));
+}
+
 function initNavigation() {
+  initSidebarToggle();
   $$('.admin-nav-link').forEach(btn => btn.addEventListener('click', () => setSection(btn.dataset.section)));
   $$('[data-section-jump]').forEach(btn => btn.addEventListener('click', () => setSection(btn.dataset.sectionJump)));
 }
