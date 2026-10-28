@@ -4,6 +4,12 @@ const STORAGE_KEY = 'trinid_admin_database_v1';
 const QUOTE_DRAFT_KEY = 'trinid_admin_quote_draft_v2';
 const BILL_DRAFT_KEY = 'trinid_admin_invoice_draft_v2';
 const CUSTOMER_PDF_OPTIONS_KEY = 'trinid_admin_customer_pdf_options_v1';
+const INVOICE_BANK_PIN_KEY = 'trinid_invoice_bank_pin_security_v1';
+const INVOICE_BANK_PIN_ITERATIONS = 260000;
+const INVOICE_BANK_PIN_MAX_FAILURES = 5;
+const INVOICE_BANK_PIN_LOCK_MS = 5 * 60 * 1000;
+const INVOICE_BANK_UNLOCK_MS = 90 * 1000;
+const INVOICE_BANK_FIELDS = [['name','billBankName'], ['holder','billBankHolder'], ['account','billBankAccount'], ['branch','billBankBranch'], ['swift','billBankSwift'], ['reference','billBankReference']];
 const CLOUD_DOC_PATH = 'trinid/default';
 const SMARTQUOTE_CONFIG_DOC_PATH = 'trinid/default/public/smartquote';
 
@@ -231,6 +237,7 @@ function defaultDb() {
     itemRecords: [],
     orders: [],
     invoices: [],
+    bankDetails: {},
     quotes: [],
     budget: [],
     customGroups: [],
@@ -265,6 +272,17 @@ normalizeMaterialColorDefaults();
 function saveDb(options = {}) {
   normalizeMaterialProfiles(db);
   normalizeMaterialColorDefaults();
+  // Also protect the saved account number from bulk imports, resets and other
+  // normal UI paths that call saveDb without first unlocking the bank account.
+  if (bankPinConfigured() && !invoiceBankUnlocked) {
+    try {
+      const previous = JSON.parse(localStorage.getItem(STORAGE_KEY) || 'null');
+      const savedAccount = normalizeInvoiceBank(previous?.bankDetails).account;
+      if (savedAccount && normalizeInvoiceBank(db.bankDetails).account !== savedAccount) {
+        db.bankDetails = { ...normalizeInvoiceBank(db.bankDetails), account: savedAccount };
+      }
+    } catch (_) { /* Invalid local cache is handled by loadDb. */ }
+  }
   const { render = true, cloud = true } = options;
   localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
   if (render) renderAll();
@@ -437,7 +455,14 @@ function startCloudSync() {
     const cloudPayload = snapshot.data() || {};
     const remoteDb = cloudPayload.database || cloudPayload;
     applyingRemote = true;
+    const previouslySavedBank = normalizeInvoiceBank(db.bankDetails);
     db = normalizeImportedAdminDb(remoteDb);
+    if (bankPinConfigured() && previouslySavedBank.account &&
+        normalizeInvoiceBank(db.bankDetails).account !== previouslySavedBank.account) {
+      db.bankDetails = { ...normalizeInvoiceBank(db.bankDetails), account: previouslySavedBank.account };
+      console.warn('Protected bank account number was not replaced by incoming cloud data.');
+    }
+    if (!INVOICE_BANK_FIELDS.some(([, field]) => document.activeElement?.id === field)) fillInvoiceBankForm(db.bankDetails);
     localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
     renderAll();
     applyingRemote = false;
@@ -1287,6 +1312,234 @@ function saveQuoteDraft() {
   });
 }
 
+
+
+// v66: Account number protected against unintended UI edits.
+// PIN verifier stays in this browser's local storage; never put it in the
+// shared admin database or Firestore and never send the PIN to cloud.
+let invoiceBankUnlocked = false;
+let invoiceBankUnlockTimer = null;
+const validBankPin = pin => typeof pin === 'string' && /^[0-9]{4}$/.test(pin);
+const bankPinHex = bytes => Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
+const bankPinBytes = text => new Uint8Array((String(text).match(/.{2}/g) || []).map(x => parseInt(x, 16)));
+function readBankPinSecurity() {
+  try { return JSON.parse(localStorage.getItem(INVOICE_BANK_PIN_KEY) || 'null') || {}; }
+  catch (_) { return {}; }
+}
+function bankPinConfigured() {
+  const r = readBankPinSecurity();
+  return !!(r.salt && r.digest && r.iterations);
+}
+function bankPinCryptoReady() {
+  return typeof crypto !== 'undefined' && !!crypto.subtle && !!crypto.getRandomValues;
+}
+async function deriveInvoiceBankPin(pin, salt, iterations) {
+  if (!bankPinCryptoReady()) throw new Error('Bank PIN protection requires HTTPS or localhost (Web Crypto).');
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(pin), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', salt, iterations, hash: 'SHA-256' }, key, 256);
+  return bankPinHex(new Uint8Array(bits));
+}
+async function createInvoiceBankPin(pin) {
+  if (!validBankPin(pin)) throw new Error('Enter exactly four digits.');
+  if (bankPinConfigured()) throw new Error('PIN already exists. Use Change PIN.');
+  if (!bankPinCryptoReady()) throw new Error('Bank PIN requires HTTPS or localhost.');
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const digest = await deriveInvoiceBankPin(pin, salt, INVOICE_BANK_PIN_ITERATIONS);
+  localStorage.setItem(INVOICE_BANK_PIN_KEY, JSON.stringify({version:1, salt:bankPinHex(salt), digest,
+    iterations:INVOICE_BANK_PIN_ITERATIONS, failed:0, lockUntil:0}));
+}
+async function verifyInvoiceBankPin(pin) {
+  const record = readBankPinSecurity();
+  if (!bankPinConfigured()) return {ok:false, message:'Set your 4-digit PIN first.'};
+  const remaining = Math.ceil((Number(record.lockUntil || 0) - Date.now()) / 1000);
+  if (remaining > 0) return {ok:false, message:`Too many attempts. Try again in ${remaining} seconds.`};
+  const iterations = Number(record.iterations);
+  if (!/^[0-9a-f]{32}$/i.test(record.salt) || !/^[0-9a-f]{64}$/i.test(record.digest) ||
+      !Number.isInteger(iterations) || iterations < 100000 || iterations > 1000000)
+    return {ok:false, message:'Invalid PIN security configuration.'};
+  // A constant-time byte comparison avoids differences based on hash prefix.
+  const derived = await deriveInvoiceBankPin(String(pin), bankPinBytes(record.salt), iterations);
+  let diff = 0;
+  for (let i = 0; i < 64; i++) diff |= derived.charCodeAt(i) ^ record.digest.charCodeAt(i);
+  if (diff === 0 && validBankPin(pin)) {
+    record.failed = 0; record.lockUntil = 0;
+    localStorage.setItem(INVOICE_BANK_PIN_KEY, JSON.stringify(record));
+    return {ok:true, message:'PIN verified.'};
+  }
+  record.failed = Number(record.failed || 0) + 1;
+  let message;
+  if (record.failed >= INVOICE_BANK_PIN_MAX_FAILURES) {
+    record.failed = 0; record.lockUntil = Date.now() + INVOICE_BANK_PIN_LOCK_MS;
+    message = 'Too many incorrect PINs. Locked for 5 minutes.';
+  } else {
+    message = `Incorrect PIN. ${INVOICE_BANK_PIN_MAX_FAILURES - record.failed} attempts remaining.`;
+  }
+  localStorage.setItem(INVOICE_BANK_PIN_KEY, JSON.stringify(record));
+  return {ok:false, message};
+}
+async function changeInvoiceBankPin(oldPin, newPin) {
+  if (!validBankPin(newPin)) throw new Error('New PIN must have exactly four digits.');
+  const check = await verifyInvoiceBankPin(oldPin);
+  if (!check.ok) throw new Error(check.message);
+  const salt = crypto.getRandomValues(new Uint8Array(16));
+  const digest = await deriveInvoiceBankPin(newPin, salt, INVOICE_BANK_PIN_ITERATIONS);
+  localStorage.setItem(INVOICE_BANK_PIN_KEY, JSON.stringify({version:1, salt:bankPinHex(salt), digest,
+    iterations:INVOICE_BANK_PIN_ITERATIONS, failed:0, lockUntil:0}));
+}
+function lockInvoiceBankAccount() {
+  if (invoiceBankUnlockTimer !== null) clearTimeout(invoiceBankUnlockTimer);
+  invoiceBankUnlockTimer = null;
+  invoiceBankUnlocked = false;
+  const account = $('#billBankAccount');
+  if (account) {
+    account.readOnly = true;
+    account.value = normalizeInvoiceBank(db.bankDetails).account;
+    account.classList.add('bank-account-readonly');
+  }
+  const status = $('#billBankPinStatus');
+  if (status) status.textContent = bankPinConfigured() ? 'Account locked' : 'Set your PIN to enable editing';
+  const setup = $('#billBankPinSetup');
+  if (setup) setup.hidden = bankPinConfigured();
+  const change = $('#billBankPinChange');
+  if (change) change.hidden = !bankPinConfigured();
+  const unlock = $('#billBankPinUnlock');
+  if (unlock) unlock.hidden = !bankPinConfigured();
+  const lock = $('#billBankPinLock');
+  if (lock) lock.hidden = true;
+}
+function unlockInvoiceBankAccountUi() {
+  invoiceBankUnlocked = true;
+  const account = $('#billBankAccount');
+  if (account) { account.readOnly = false; account.classList.remove('bank-account-readonly'); account.focus(); }
+  const status = $('#billBankPinStatus');
+  if (status) status.textContent = 'Unlocked for 90 seconds';
+  $('#billBankPinUnlock').hidden = true;
+  $('#billBankPinLock').hidden = false;
+  if (invoiceBankUnlockTimer !== null) clearTimeout(invoiceBankUnlockTimer);
+  invoiceBankUnlockTimer = setTimeout(lockInvoiceBankAccount, INVOICE_BANK_UNLOCK_MS);
+}
+function requestInvoiceBankPin(title, { confirmPin = false } = {}) {
+  const dialog = $('#invoiceBankPinDialog');
+  if (!dialog || typeof dialog.showModal !== 'function') {
+    alert('This browser does not support the secure PIN entry dialog.');
+    return Promise.resolve(null);
+  }
+  const form = $('#invoiceBankPinForm');
+  const first = $('#invoiceBankPinInput');
+  const again = $('#invoiceBankPinConfirm');
+  const error = $('#invoiceBankPinError');
+  $('#invoiceBankPinTitle').textContent = title;
+  $('#invoiceBankPinConfirmField').hidden = !confirmPin;
+  first.value = ''; again.value = ''; error.textContent = '';
+  return new Promise(resolve => {
+    let finished = false;
+    function finish(result) {
+      if (finished) return;
+      finished = true;
+      form.removeEventListener('submit', submit);
+      dialog.removeEventListener('close', close);
+      $('#invoiceBankPinCancel').removeEventListener('click', cancel);
+      if (dialog.open) dialog.close();
+      resolve(result);
+    }
+    function submit(event) {
+      event.preventDefault();
+      if (!validBankPin(first.value)) { error.textContent = 'Enter exactly four digits.'; return; }
+      if (confirmPin && first.value !== again.value) { error.textContent = 'PINs do not match.'; return; }
+      finish(first.value);
+    }
+    function close() { finish(null); }
+    function cancel() { finish(null); }
+    form.addEventListener('submit', submit);
+    dialog.addEventListener('close', close);
+    $('#invoiceBankPinCancel').addEventListener('click', cancel);
+    dialog.showModal();
+    first.focus();
+  });
+}
+async function setupInvoiceBankPinUi() {
+  if (bankPinConfigured()) return alert('A PIN already exists. Use Change PIN.');
+  const pin = await requestInvoiceBankPin('Set a 4-digit bank PIN', {confirmPin:true});
+  if (pin === null) return;
+  try { await createInvoiceBankPin(pin); lockInvoiceBankAccount(); toast('Bank account PIN saved. The account stays locked.'); }
+  catch (e) { alert(e.message); }
+}
+async function unlockInvoiceBankPinUi() {
+  if (!bankPinConfigured()) return alert('Set a 4-digit PIN first.');
+  const pin = await requestInvoiceBankPin('Unlock bank account number');
+  if (pin === null) return;
+  try {
+    const answer = await verifyInvoiceBankPin(pin);
+    if (!answer.ok) return alert(answer.message);
+    unlockInvoiceBankAccountUi();
+  } catch (e) { alert(e.message); }
+}
+async function changeInvoiceBankPinUi() {
+  if (!bankPinConfigured()) return setupInvoiceBankPinUi();
+  const oldPin = await requestInvoiceBankPin('Enter current bank PIN');
+  if (oldPin === null) return;
+  const newPin = await requestInvoiceBankPin('Set new 4-digit bank PIN', {confirmPin:true});
+  if (newPin === null) return;
+  try { await changeInvoiceBankPin(oldPin, newPin); lockInvoiceBankAccount(); toast('Bank PIN changed. Account locked.'); }
+  catch (e) { alert(e.message); }
+}
+
+// v65: Reusable invoice bank profile. Stored in the admin database (including
+// the existing authenticated cloud sync), not in a public page or quote.
+function normalizeInvoiceBank(value) {
+  const raw = (value && typeof value === 'object') ? value : {};
+  return Object.fromEntries(INVOICE_BANK_FIELDS.map(([key]) => [key, String(raw[key] ?? '').trim().slice(0, 160)]));
+}
+function invoiceBankFromForm() {
+  return normalizeInvoiceBank(Object.fromEntries(INVOICE_BANK_FIELDS.map(([key, id]) => [key, $(`#${id}`)?.value || ''])));
+}
+function fillInvoiceBankForm(raw) {
+  const details = normalizeInvoiceBank(raw);
+  INVOICE_BANK_FIELDS.forEach(([key, id]) => {
+    const el = $(`#${id}`);
+    if (el && !(key === 'account' && invoiceBankUnlocked)) el.value = details[key];
+  });
+}
+function saveInvoiceBankDetails() {
+  const details = invoiceBankFromForm();
+  const saved = normalizeInvoiceBank(db.bankDetails);
+  if (!bankPinConfigured()) {
+    alert('Set your 4-digit Bank PIN before saving bank details.');
+    return;
+  }
+  if (!details.name || !details.holder || !details.account) {
+    alert('Fill Bank Name, Account Holder, and Account Number before saving.');
+    return;
+  }
+  if (details.account !== saved.account) {
+    if (!invoiceBankUnlocked) {
+      $('#billBankAccount').value = saved.account;
+      alert('Account number is locked. Enter your PIN to edit it.');
+      return;
+    }
+    const oldEnding = saved.account ? saved.account.slice(-4) : 'none';
+    const newEnding = details.account.slice(-4);
+    if (!confirm(`Change bank account ending ${oldEnding} to ${newEnding}?\n\nPlease verify the full account number first.`)) return;
+  }
+  db.bankDetails = details;
+  saveDb({ render: false, cloud: true });
+  lockInvoiceBankAccount();
+  toast('Bank details saved. Account locked again.');
+}
+function invoiceBankForPdf() {
+  if (!$('#billIncludeBank')?.checked) return null;
+  const details = invoiceBankFromForm();
+  if (details.account !== normalizeInvoiceBank(db.bankDetails).account) {
+    alert('Save the bank account number using your PIN before generating this invoice.');
+    return false;
+  }
+  if (!details.name || !details.holder || !details.account) {
+    alert('To include bank details in the invoice, enter Bank Name, Account Holder, and Account Number.');
+    return false;
+  }
+  return details;
+}
+
 function saveBillDraft() {
   writeDraft(BILL_DRAFT_KEY, {
     customer: $('#billCustomer')?.value || '',
@@ -1300,6 +1553,7 @@ function saveBillDraft() {
     serviceCharge: $('#billServiceCharge')?.value || '0',
     overallDiscount: $('#billOverallDiscount')?.value || '0',
     overallDiscountPct: $('#billOverallDiscountPct')?.value || '',
+    includeBankDetails: !!$('#billIncludeBank')?.checked,
     showMaterial: !!$('#billShowMaterial')?.checked,
     showColor: !!$('#billShowColor')?.checked,
     showWeight: !!$('#billShowWeight')?.checked,
@@ -1351,6 +1605,7 @@ function restoreBillDraft() {
     $('#billServiceCharge').value = draft.serviceCharge || '0';
     $('#billOverallDiscount').value = draft.overallDiscount || '0';
     $('#billOverallDiscountPct').value = draft.overallDiscountPct || '';
+    $('#billIncludeBank').checked = !!draft.includeBankDetails;
     const legacyBillSpecs = draft.showCustomerSpecs !== undefined ? draft.showCustomerSpecs !== false : true;
     $('#billShowMaterial').checked = draft.showMaterial !== undefined ? draft.showMaterial !== false : legacyBillSpecs;
     $('#billShowColor').checked = draft.showColor !== undefined ? draft.showColor !== false : legacyBillSpecs;
@@ -1360,6 +1615,7 @@ function restoreBillDraft() {
     (draft.items && draft.items.length ? draft.items : [{}]).forEach(item => addBillRow(item));
   } else {
     addBillRow();
+    $('#billIncludeBank').checked = false;
   }
   recalcBill();
 }
@@ -1400,6 +1656,7 @@ function resetBillDraft() {
   $('#billServiceCharge').value = '0';
   $('#billOverallDiscount').value = '0';
   $('#billOverallDiscountPct').value = '';
+  $('#billIncludeBank').checked = false; // Saved bank profile is not erased by invoice reset.
   if ($('#billShowMaterial')) $('#billShowMaterial').checked = true;
   if ($('#billShowColor')) $('#billShowColor').checked = true;
   if ($('#billShowWeight')) $('#billShowWeight').checked = true;
@@ -1458,8 +1715,17 @@ function initBillQuote() {
   if ($('#billShowPrintTime')) $('#billShowPrintTime').checked = pdfOptions.billShowPrintTime !== false;
   if ($('#quoteUseCustomerFileName')) $('#quoteUseCustomerFileName').checked = !!pdfOptions.quoteUseCustomerName;
   if ($('#billUseCustomerFileName')) $('#billUseCustomerFileName').checked = !!pdfOptions.billUseCustomerName;
+  fillInvoiceBankForm(db.bankDetails);
+  lockInvoiceBankAccount();
   restoreBillDraft();
   restoreQuoteDraft();
+  $('#saveInvoiceBankBtn').addEventListener('click', saveInvoiceBankDetails);
+  $('#billBankPinSetup').addEventListener('click', setupInvoiceBankPinUi);
+  $('#billBankPinUnlock').addEventListener('click', unlockInvoiceBankPinUi);
+  $('#billBankPinLock').addEventListener('click', lockInvoiceBankAccount);
+  $('#billBankPinChange').addEventListener('click', changeInvoiceBankPinUi);
+  document.addEventListener('visibilitychange', () => { if (document.hidden) lockInvoiceBankAccount(); });
+  $('#billIncludeBank').addEventListener('change', saveBillDraft);
   initSetAllRow('quote');
   initSetAllRow('bill');
   $('#addBillRowBtn').addEventListener('click', () => { addBillRow(); saveBillDraft(); });
@@ -1509,8 +1775,11 @@ function generateInvoice(e) {
   const items = collectBillItems();
   if (!items.length) return alert('Please add at least one invoice item.');
   const totals = billTotals(items);
+  const bankDetails = invoiceBankForPdf();
+  if (bankDetails === false) return;
   const data = {
     type: 'INVOICE',
+    bankDetails,
     no: $('#invoiceNo').value,
     date: $('#billDate').value || todayISO(),
     customer: $('#billCustomer').value.trim(),
@@ -1534,7 +1803,7 @@ function generateInvoice(e) {
     id: id('INVOICE'), createdAt: nowStamp(), invoiceNo: data.no, orderId: data.no, customer: data.customer,
     date: data.date, subtotal: totals.subtotal, discount: totals.discount, overallDiscount: totals.overallDiscount, total: totals.total,
     advancePayment: totals.advance, balance: totals.balance, paidStatus: data.paidStatus, paidMethod: data.paidMethod,
-    totalCost: totals.cost, profit: totals.profit, serviceCharge: totals.serviceCharge, items: data.items, notes: data.notes, documentData: data
+    totalCost: totals.cost, profit: totals.profit, serviceCharge: totals.serviceCharge, items: data.items, notes: data.notes, bankDetails: data.bankDetails, documentData: data
   };
   // Bills / Invoices are saved only in the Bills / Invoices database.
   // They do not create Orders, Costs, Profit, Income, or Budget records.
@@ -1847,6 +2116,9 @@ function printDocument(data) {
   const showItemWeight = data.showWeight !== undefined ? data.showWeight !== false : showCustomerSpecs;
   const showItemPrintTime = data.showPrintTime !== undefined ? data.showPrintTime !== false : showCustomerSpecs;
   const thanks = isInvoice ? 'Thank you for your business!' : 'Thank you for choosing Trini-D!';
+  const bankDetails = isInvoice && data.bankDetails ? normalizeInvoiceBank(data.bankDetails) : null;
+  const bankRows = bankDetails ? [['Bank', bankDetails.name], ['Account Holder', bankDetails.holder], ['Account No.', bankDetails.account], ['Branch', bankDetails.branch], ['SWIFT / BIC', bankDetails.swift], ['Reference', bankDetails.reference]].filter(([, v]) => v) : [];
+  const bankBlockHeight = bankRows.length ? 29 + bankRows.length * 14 : 0;
   const formatNumber = v => Number(v || 0).toLocaleString('en-LK', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   const formatMoneyDot = v => `Rs. ${ceilCurrency(v).toLocaleString('en-LK', { maximumFractionDigits: 0 })}`;
   const normalizedLayer = item => item.layer ? `${safe(item.layer)}${String(item.layer).toLowerCase().includes('mm') ? '' : ' mm'}` : '';
@@ -1952,6 +2224,7 @@ function printDocument(data) {
     if (data.totals.discount > 0 || data.totals.overallDiscount > 0) totalNeeded += 24;
     if (data.totals.advance > 0) totalNeeded += 48;
     if (notesLineCount) totalNeeded += 24 + notesLineCount * 12;
+    if (bankBlockHeight) totalNeeded += bankBlockHeight + 20;
   } else {
     totalNeeded = 50 + (data.totals.discount > 0 || data.totals.overallDiscount > 0 ? 20 : 0)
       + (data.totals.discount > 0 && data.totals.overallDiscount > 0 ? 44 : 0)
@@ -1991,6 +2264,10 @@ function printDocument(data) {
         base += 12;
         parts.push(`<div class="inv-notes-line" style="top:${(base - 6.77).toFixed(2)}pt">${safe(line.slice(0, 95))}</div>`);
       });
+    }
+    if (bankRows.length) {
+      const bankTop = Math.max(t + 18, noteLines.length ? t + 24 + noteLines.length * 12 + 12 : t + 18);
+      parts.push(`<section class="invoice-bank" style="top:${bankTop.toFixed(2)}pt;height:${bankBlockHeight}pt"><div class="invoice-bank-title">BANK DETAILS</div>${bankRows.map(([label, value], i) => `<div class="invoice-bank-row" style="top:${(25 + i * 14)}pt"><b>${safe(label)}</b><span>${safe(value)}</span></div>`).join('')}</section>`);
     }
     return parts.join('');
   }
@@ -2050,6 +2327,7 @@ function printDocument(data) {
   const pagesHtml = chunks.map(renderPage).join('');
   const html = `<!doctype html><html><head><base href="${location.href}"><title>${safe(fileTitle)}</title><style>
     @page{size:A4;margin:0}*{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff;color:#111;font-family:Arial,Helvetica,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}.print-btn{position:fixed;right:12px;top:12px;z-index:50;border:0;border-radius:999px;background:#d4af37;color:#111;font-weight:900;padding:10px 16px;box-shadow:0 10px 30px rgba(0,0,0,.25);cursor:pointer}@media print{.print-btn{display:none}.page{margin:0!important;page-break-after:always}.page:last-child{page-break-after:auto}}.page{width:210mm;height:297mm;margin:0 auto;background:#fff;position:relative;overflow:hidden}.header{position:absolute;left:0;top:0;width:210mm;height:110pt;background:#111;border-bottom:2.5pt solid #d4af37}.logo{position:absolute;left:18mm;top:16pt;width:78pt;height:78pt;object-fit:contain}.brand-name{position:absolute;left:139pt;top:22pt;width:180pt;height:46pt;object-fit:contain}.header-motto{position:absolute;left:139pt;top:76pt;width:180pt;text-align:center;font-size:6pt;font-weight:700;letter-spacing:.02em;white-space:nowrap;color:#e8e8e8;line-height:1}.header-motto .gold{color:#d4af37}.doc-title{position:absolute;right:18mm;top:35pt;text-align:right;color:#fff;font-size:20pt;font-weight:700;line-height:1;letter-spacing:.02em}.doc-id-top{position:absolute;right:18mm;top:67pt;text-align:right;color:#d4af37;font-size:9pt;line-height:1}.panel{position:absolute;left:18mm;top:120pt;width:174mm;height:68pt;background:#f2f2f2;border-radius:6pt}.label{font-size:8pt;font-weight:700;color:#2d2d2d;text-transform:uppercase;line-height:1}.customer-label{position:absolute;left:22mm;top:136pt}.customer-name{position:absolute;left:22mm;top:151pt;font-size:13pt;font-weight:700;color:#111;line-height:1}.date-label{position:absolute;left:405pt;top:133pt}.date-value{position:absolute;left:405pt;top:147pt;font-size:10pt;color:#111;line-height:1}.number-label{position:absolute;left:405pt;top:165pt}.number-value{position:absolute;left:405pt;top:178pt;font-size:8pt;font-weight:700;color:#d4af37;line-height:1}.table-wrap{position:absolute;left:18mm;top:194pt;width:174mm;border-bottom:.5pt solid #ccc}.table-head{position:absolute;left:0;top:0;width:100%;height:26pt;background:#111;border-bottom:1pt solid #d4af37;color:#d4af37;font-size:7.5pt;font-weight:700;text-transform:uppercase;line-height:1}.th{position:absolute;top:10pt;text-align:center;white-space:nowrap}.th:first-child{text-align:left}.doc-row{position:absolute;left:0;width:100%;font-size:9pt;color:#111;line-height:1}.row-light{background:#f2f2f2}.row-white{background:#fff}.td{position:absolute;top:8pt;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.q-model,.i-model,.i-model-disc,.id-model-disc{text-align:left;font-weight:700}.q-total,.i-total,.id-total-disc{font-weight:700;text-align:right}.q-unit,.q-layer,.q-walls,.q-infill,.id-qty-disc{color:#2d2d2d}.id-discount-disc{color:#cc3333}.quote-sub{position:absolute;left:4pt;font-size:7pt;font-style:italic;color:#888;line-height:1}.spec-line{position:absolute;left:4pt;top:21pt}.spec-tag{display:inline-block;background:none;color:#888;padding:0;font-size:7pt;font-style:italic;line-height:1}.c-model{left:4pt;text-align:left}.c-qty{left:136pt;width:40pt}.c-unit{left:190pt;width:68pt}.c-layer{left:271pt;width:58pt}.c-walls{left:333pt;width:59pt}.c-infill{left:395pt;width:55pt}.c-total{right:4pt;width:64pt}.q-model{left:4pt;width:132pt}.q-qty{left:136pt;width:40pt;font-weight:700}.q-unit{left:190pt;width:68pt;font-size:8pt}.q-layer{left:271pt;width:58pt;font-size:8pt}.q-walls{left:333pt;width:59pt;font-size:8pt}.q-infill{left:395pt;width:55pt;font-size:8pt}.q-total{right:4pt;width:70pt}.q-model-disc{left:4pt;width:112pt}.q-qty-disc{left:117pt;width:34pt;font-weight:700}.q-unit-disc{left:160pt;width:60pt;font-size:8pt}.q-discount-disc{left:225pt;width:60pt;font-size:8pt;color:#cc3333}.q-layer-disc{left:290pt;width:44pt;font-size:8pt}.q-walls-disc{left:337pt;width:44pt;font-size:8pt}.q-infill-disc{left:384pt;width:44pt;font-size:8pt}.q-total-disc{right:4pt;width:54pt;font-weight:700;text-align:right}.i-model{left:4pt;width:220pt}.i-qty{left:245pt;width:40pt;font-weight:700}.i-unit{left:310pt;width:85pt}.i-total{right:4pt;width:90pt}.i-model-disc{left:4pt;width:190pt;text-align:left}.i-qty-disc{left:206pt;width:35pt}.i-unit-disc{left:253pt;width:70pt}.i-discount-disc{left:335pt;width:70pt}.i-total-disc{right:4pt;width:76pt}.id-model-disc{left:4pt;width:190pt}.id-qty-disc{left:206pt;width:35pt}.id-unit-disc{left:253pt;width:70pt}.id-discount-disc{left:335pt;width:70pt}.id-total-disc{right:4pt;width:76pt}.totals{position:absolute;right:18mm;width:90mm}.total-quote,.total-main,.total-balance{height:24pt;background:#d4af37;color:#111;font-size:12pt;font-weight:700;line-height:24pt;padding:0 8pt}.total-quote{display:flex;justify-content:space-between}.total-main,.total-balance,.total-mini{display:flex;justify-content:space-between}.total-mini{height:20pt;color:#111;font-size:9pt;line-height:20pt;padding:0 8pt}.total-mini.red{color:#cc3333}.th.q-discount-disc,.th.id-discount-disc,.th.i-discount-disc{color:#d4af37}.total-balance{background:#1a5c2a;color:#4ade80}.notes{position:absolute;left:18mm;width:95mm;font-size:8pt;color:#111}.notes b{display:block;color:#2d2d2d;margin-bottom:4pt}.notes span{display:block;margin-bottom:3pt}.footer{position:absolute;left:0;bottom:38pt;width:210mm;height:90pt;background:#111;border-top:2pt solid #d4af37}.footer-title{position:absolute;left:18mm;top:20pt;color:#d4af37;font-size:13pt;font-weight:700}.footer-phone{position:absolute;left:18mm;top:42pt;color:#fff;font-size:8.5pt}.footer-wa{position:absolute;left:18mm;top:56pt;color:#fff;font-size:8.5pt}.footer-motto{position:absolute;left:18mm;top:70pt;color:#ccc;font-size:7.5pt;font-style:italic}.qr{position:absolute;right:18mm;top:6pt;width:68pt;height:68pt}.qr-caption{position:absolute;right:18mm;top:76pt;width:68pt;text-align:center;color:#ccc;font-size:6.5pt;line-height:1;white-space:nowrap}.page-line{position:absolute;left:0;bottom:15pt;width:210mm;text-align:center;font-size:7pt;color:#bbb}
+  .invoice-bank{position:absolute;left:18mm;width:174mm;border:0.6pt solid #d4af37;border-radius:3pt;background:#faf9f4;overflow:hidden}.invoice-bank-title{position:absolute;top:0;left:0;right:0;height:20pt;line-height:20pt;background:#111;color:#d4af37;font-size:9pt;font-weight:700;padding-left:9pt}.invoice-bank-row{position:absolute;left:9pt;right:8pt;display:flex;gap:10pt;align-items:baseline;font-size:8pt;white-space:nowrap;overflow:hidden;height:14pt}.invoice-bank-row b{width:90pt;flex-shrink:0;color:#2d2d2d}.invoice-bank-row span{overflow:hidden;text-overflow:ellipsis;color:#111}
   ${INVOICE_DESKTOP_CSS}${isInvoice ? '' : QUOTE_DESKTOP_CSS}${PAPER_TOOLBAR_CSS}${PAPER_SCALE_CSS}</style></head><body>${PAPER_TOOLBAR_HTML}${pagesHtml}${paperSizeScript('scale', '0')}<script>window.onload = () => setTimeout(() => window.print(), 350);</script></body></html>`;
   const win = window.open('', '_blank');
   win.document.write(html);
@@ -2182,6 +2460,7 @@ function printableInvoiceData(r) {
     notes: r.notes || '',
     items,
     totals: { subtotal: num(r.subtotal), discount: num(r.discount), overallDiscount: num(r.overallDiscount), total: num(r.total), advance: num(r.advancePayment), balance: num(r.balance), cost: num(r.totalCost), profit: num(r.profit) },
+    bankDetails: r.bankDetails || null,
     paidStatus: r.paidStatus || 'Unpaid',
     paidMethod: r.paidMethod || ''
   };
@@ -2237,6 +2516,9 @@ function loadInvoiceIntoEditor(recordId) {
   if ($('#invoiceNo')) $('#invoiceNo').value = record.invoiceNo || docId('INV');
   if ($('#billDate')) $('#billDate').value = record.date || todayISO();
   if ($('#billNotes')) $('#billNotes').value = record.notes || '';
+  const invoiceBank = record.documentData?.bankDetails || record.bankDetails;
+  $('#billIncludeBank').checked = !!invoiceBank;
+  if (invoiceBank) fillInvoiceBankForm(invoiceBank);
   const savedOverall = record.documentData?.totals?.overallDiscount ?? record.overallDiscount ?? 0;
   $('#billOverallDiscount').value = String(savedOverall);
   $('#billOverallDiscountPct').value = '';

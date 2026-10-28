@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="../styles.css?v=43" />
-  <link rel="stylesheet" href="admin.css?v=60" />
+  <link rel="stylesheet" href="admin.css?v=66" />
 </head>
 <body class="admin-body">
   <div class="admin-login" id="adminLogin">
@@ -246,6 +246,27 @@
               <label class="check-field"><input id="billShowPrintTime" type="checkbox" checked> <span>Show printing time</span></label>
               <label class="check-field"><input id="billUseCustomerFileName" type="checkbox"> <span>Add customer name to PDF file name</span></label>
             </div>
+            <div class="feature-options invoice-bank-options">
+              <div class="feature-options-title">Bank Details (optional) — invoice PDF only</div>
+              <label class="check-field"><input id="billIncludeBank" type="checkbox"> <span>Include saved bank details in this invoice PDF</span></label>
+              <div class="form-grid admin-form-grid two feature-grid">
+                <label class="field"><span>Bank Name</span><input id="billBankName" type="text" autocomplete="off" placeholder="Bank name"></label>
+                <label class="field"><span>Account Holder</span><input id="billBankHolder" type="text" autocomplete="off" placeholder="Account holder name"></label>
+                <label class="field"><span>Account Number</span><input id="billBankAccount" type="text" autocomplete="off" placeholder="Account number" readonly class="bank-account-readonly"></label>
+                <label class="field"><span>Branch</span><input id="billBankBranch" type="text" autocomplete="off" placeholder="Branch (optional)"></label>
+                <label class="field"><span>SWIFT / BIC</span><input id="billBankSwift" type="text" autocomplete="off" placeholder="Optional"></label>
+                <label class="field"><span>Payment Reference / Instructions</span><input id="billBankReference" type="text" autocomplete="off" placeholder="Optional"></label>
+              </div>
+              <div class="bank-pin-controls">
+                <span id="billBankPinStatus" role="status">Account locked</span>
+                <button type="button" class="btn ghost" id="billBankPinSetup">Set 4-Digit PIN</button>
+                <button type="button" class="btn ghost" id="billBankPinUnlock" hidden>Unlock Account</button>
+                <button type="button" class="btn ghost" id="billBankPinLock" hidden>Lock Account</button>
+                <button type="button" class="btn ghost" id="billBankPinChange" hidden>Change PIN</button>
+              </div>
+              <div class="admin-actions"><button type="button" class="btn ghost" id="saveInvoiceBankBtn">Save Bank Details for Future Invoices</button></div>
+              <small class="overall-discount-help">The account number is read-only until you enter your PIN, and locks after 90 seconds or Save. Other bank fields remain editable. PIN is saved only on this device.</small>
+            </div>
             <div class="feature-options advance-options">
               <div class="feature-options-title">Advance Payment (optional)</div>
               <label class="check-field"><input id="billAdvanceEnabled" type="checkbox"> <span>Customer paid an advance</span></label>
@@ -459,6 +480,15 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
   <script src="firebase-config.js"></script>
-  <script src="admin.js?v=62"></script>
+  <script src="admin.js?v=66"></script>
+  <dialog id="invoiceBankPinDialog" class="invoice-bank-pin-dialog" aria-labelledby="invoiceBankPinTitle">
+    <form id="invoiceBankPinForm" novalidate>
+      <h3 id="invoiceBankPinTitle">Bank Account PIN</h3>
+      <label class="field"><span>4-digit PIN</span><input id="invoiceBankPinInput" type="password" inputmode="numeric" autocomplete="off" maxlength="4" pattern="[0-9]{4}" required></label>
+      <label class="field" id="invoiceBankPinConfirmField" hidden><span>Confirm PIN</span><input id="invoiceBankPinConfirm" type="password" inputmode="numeric" autocomplete="off" maxlength="4"></label>
+      <p id="invoiceBankPinError" class="invoice-bank-pin-error" role="alert"></p>
+      <div class="admin-actions"><button id="invoiceBankPinCancel" class="btn ghost" type="button">Cancel</button><button id="invoiceBankPinSubmit" class="btn" type="submit">Continue</button></div>
+    </form>
+  </dialog>
 </body>
 </html>

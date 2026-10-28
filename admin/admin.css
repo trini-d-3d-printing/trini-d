@@ -425,3 +425,19 @@ input[type="number"]::-webkit-inner-spin-button {
 .overall-discount-options{margin:14px 0;padding:13px 16px;border:1px solid rgba(204,150,29,.33);border-radius:13px}
 .overall-discount-options .feature-grid{margin-top:10px}
 .overall-discount-help{display:block;color:#a8a8a8;font-size:12px;margin:6px 0 0}
+
+/* v66: Invoice bank account PIN safety controls */
+.bank-pin-controls { display:flex; align-items:center; gap:8px; flex-wrap:wrap; margin:12px 0; }
+.bank-pin-controls #billBankPinStatus { font-weight:700; color:#CC961D; margin-right:8px; }
+.bank-pin-controls .btn { padding:7px 11px; font-size:12px; }
+.bank-account-readonly { opacity:.83; cursor:not-allowed; }
+.invoice-bank-pin-dialog { position:fixed; margin:auto; border:1px solid #CC961D; border-radius:14px; padding:24px;
+  background:#171c25; color:#FEFEFE; width:min(420px,90vw); max-width:90vw; box-shadow:0 15px 55px #0009; }
+.invoice-bank-pin-dialog::backdrop { background:rgba(0,0,0,.72); }
+.invoice-bank-pin-dialog h3 { margin:0 0 16px; color:#CC961D; }
+.invoice-bank-pin-dialog .field { display:block; margin:12px 0; }
+.invoice-bank-pin-dialog input { display:block; box-sizing:border-box; width:100%; padding:12px; font-size:18px;
+  color:#FEFEFE; background:#10141b; border:1px solid #58616d; border-radius:8px; margin-top:7px; }
+.invoice-bank-pin-dialog .invoice-bank-pin-error { color:#ff8a8a; min-height:20px; }
+.invoice-bank-pin-dialog .admin-actions { display:flex; justify-content:flex-end; gap:8px; }
+.bank-pin-controls [hidden], .invoice-bank-pin-dialog [hidden] { display: none !important; }
