@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="../styles.css?v=43" />
-  <link rel="stylesheet" href="admin.css?v=48" />
+  <link rel="stylesheet" href="admin.css?v=49" />
 </head>
 <body class="admin-body">
   <div class="admin-login" id="adminLogin">
@@ -213,7 +213,6 @@
               <label class="field"><span>Date</span><input id="billDate" type="date"></label>
               <label class="field"><span>Paid Status</span><select id="billPaidStatus"><option value="Unpaid">Unpaid</option><option value="Paid">Paid</option><option value="Advance">Advance</option></select></label>
               <label class="field"><span>Paid Method</span><input id="billPaidMethod" type="text" placeholder="Cash / Bank / Online"></label>
-              <label class="field"><span>Advance Paid Rs</span><input id="billAdvance" type="text" inputmode="decimal" step="0.01" value="0"></label>
             </div>
             <div class="table-wrap line-editor"><table><thead><tr><th>Model</th><th>Material</th><th>Color</th><th>Qty</th><th>Unit Price</th><th>Discount</th><th>Cost Rs</th><th>Layer</th><th>Walls</th><th>Infill</th><th>Weight</th><th>Print Time</th><th></th></tr></thead><tbody id="billItemsBody"></tbody></table></div>
             <div class="admin-actions"><button class="btn ghost" id="addBillRowBtn" type="button">+ Add Item</button><button class="btn ghost" id="addCalcBillBtn" type="button">Add Calculator Result</button><button class="btn ghost" id="resetBillBtn" type="button">Reset Invoice</button></div>
@@ -229,12 +228,18 @@
               <label class="check-field"><input id="billShowPrintTime" type="checkbox" checked> <span>Show printing time</span></label>
               <label class="check-field"><input id="billUseCustomerFileName" type="checkbox"> <span>Add customer name to PDF file name</span></label>
             </div>
+            <div class="feature-options advance-options">
+              <div class="feature-options-title">Advance Payment (optional)</div>
+              <label class="check-field"><input id="billAdvanceEnabled" type="checkbox"> <span>Customer paid an advance</span></label>
+              <label class="field advance-amount-field" id="billAdvanceField" hidden><span>Advance Amount (Rs.)</span><input id="billAdvance" type="text" inputmode="decimal" step="0.01" value="0"></label>
+            </div>
             <label class="field"><span>Notes optional</span><textarea id="billNotes" rows="3" placeholder="Payment note, pickup note..."></textarea></label>
             <div class="summary-grid">
               <div><span>Subtotal</span><b id="billSubtotal">Rs 0</b></div>
               <div><span>Service Charge</span><b id="billServiceTotal">Rs 0</b></div>
               <div><span>Discount</span><b id="billDiscount">Rs 0</b></div>
               <div><span>Total</span><b id="billGrandTotal">Rs 0</b></div>
+              <div><span>Advance Paid</span><b id="billAdvanceShown">Rs 0</b></div>
               <div><span>Balance Due</span><b id="billBalance">Rs 0</b></div>
             </div>
             <button class="btn primary" type="submit">Generate Invoice PDF / Print</button>
@@ -435,6 +440,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
   <script src="firebase-config.js"></script>
-  <script src="admin.js?v=55"></script>
+  <script src="admin.js?v=56"></script>
 </body>
 </html>

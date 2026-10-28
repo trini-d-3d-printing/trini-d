@@ -409,3 +409,9 @@ input[type="number"]::-webkit-inner-spin-button {
   .admin-sidebar{margin:10px 10px 0;border-radius:22px;overflow:visible}
   .admin-main{padding-top:16px}
 }
+/* v56 — bill: advance payment block + 6-tile summary */
+.advance-options{align-items:center}
+.advance-options .advance-amount-field{margin:0;min-width:240px}
+.advance-options .advance-amount-field[hidden]{display:none!important}
+#section-bill .summary-grid{grid-template-columns:repeat(3,1fr)}
+@media(max-width:720px){#section-bill .summary-grid{grid-template-columns:1fr}}
