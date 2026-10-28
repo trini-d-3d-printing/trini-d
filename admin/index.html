@@ -10,7 +10,7 @@
   <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
   <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
   <link rel="stylesheet" href="../styles.css?v=43" />
-  <link rel="stylesheet" href="admin.css?v=59" />
+  <link rel="stylesheet" href="admin.css?v=60" />
 </head>
 <body class="admin-body">
   <div class="admin-login" id="adminLogin">
@@ -177,7 +177,8 @@
               <div><span>Total Printing Time</span><b id="quoteTotalTime">0m</b></div>
               <div><span>Service Charge</span><b id="quoteServiceTotal">Rs 0</b></div>
               <div><span>Subtotal</span><b id="quoteSubtotal">Rs 0</b></div>
-              <div><span>Discount</span><b id="quoteDiscount">Rs 0</b></div>
+              <div><span>Item Discounts</span><b id="quoteDiscount">Rs 0</b></div>
+              <div><span>Overall Discount</span><b id="quoteOverallDiscountShown">Rs 0</b></div>
               <div><span>Quotation Total</span><b id="quoteGrandTotal">Rs 0</b></div>
             </div>
             <div class="table-wrap line-editor"><table><thead><tr><th>Model</th><th>Material</th><th>Color</th><th>Qty</th><th>Unit Price</th><th>Discount</th><th>Layer</th><th>Walls</th><th>Infill</th><th>Weight</th><th>Print Time</th><th></th></tr></thead><tbody id="quoteItemsBody"></tbody></table></div>
@@ -185,6 +186,14 @@
             <div class="form-grid admin-form-grid two feature-grid">
               <label class="field"><span>Design / Other Service Name</span><input id="quoteServiceName" type="text" placeholder="Model design / Other service" value="Model Design / Other Service"></label>
               <label class="field"><span>Design / Other Service Price Rs</span><input id="quoteServiceCharge" type="text" inputmode="decimal" value="0"></label>
+            </div>
+            <div class="feature-options overall-discount-options">
+              <div class="feature-options-title">Overall Discount (optional) — applied at the end of the quotation after item discounts and service charges</div>
+              <div class="form-grid admin-form-grid two feature-grid">
+                <label class="field"><span>Overall Discount (Rs)</span><input id="quoteOverallDiscount" type="number" inputmode="decimal" min="0" step="1" value="0" placeholder="0"></label>
+                <label class="field"><span>Overall Discount (%)</span><input id="quoteOverallDiscountPct" type="number" inputmode="decimal" min="0" max="100" step="any" placeholder="Optional %"></label>
+              </div>
+              <small class="overall-discount-help">Enter either an Rs amount or a percentage. Changing one updates the other; the discount cannot exceed the remaining bill amount.</small>
             </div>
             <div class="feature-options quote-description-options">
               <div class="feature-options-title">Customer PDF Item Description</div>
@@ -221,6 +230,14 @@
               <label class="field"><span>Design / Other Service Name</span><input id="billServiceName" type="text" placeholder="Model design / Other service" value="Model Design / Other Service"></label>
               <label class="field"><span>Design / Other Service Price Rs</span><input id="billServiceCharge" type="text" inputmode="decimal" value="0"></label>
             </div>
+            <div class="feature-options overall-discount-options">
+              <div class="feature-options-title">Overall Discount (optional) — applied at the end of the invoice after item discounts and service charges</div>
+              <div class="form-grid admin-form-grid two feature-grid">
+                <label class="field"><span>Overall Discount (Rs)</span><input id="billOverallDiscount" type="number" inputmode="decimal" min="0" step="1" value="0" placeholder="0"></label>
+                <label class="field"><span>Overall Discount (%)</span><input id="billOverallDiscountPct" type="number" inputmode="decimal" min="0" max="100" step="any" placeholder="Optional %"></label>
+              </div>
+              <small class="overall-discount-help">Enter either an Rs amount or a percentage. Changing one updates the other; the discount cannot exceed the remaining bill amount.</small>
+            </div>
             <div class="feature-options bill-description-options">
               <div class="feature-options-title">Customer PDF Item Description</div>
               <label class="check-field"><input id="billShowMaterial" type="checkbox" checked> <span>Show material</span></label>
@@ -238,7 +255,8 @@
             <div class="summary-grid">
               <div><span>Subtotal</span><b id="billSubtotal">Rs 0</b></div>
               <div><span>Service Charge</span><b id="billServiceTotal">Rs 0</b></div>
-              <div><span>Discount</span><b id="billDiscount">Rs 0</b></div>
+              <div><span>Item Discounts</span><b id="billDiscount">Rs 0</b></div>
+              <div><span>Overall Discount</span><b id="billOverallDiscountShown">Rs 0</b></div>
               <div><span>Total</span><b id="billGrandTotal">Rs 0</b></div>
               <div><span>Advance Paid</span><b id="billAdvanceShown">Rs 0</b></div>
               <div><span>Balance Due</span><b id="billBalance">Rs 0</b></div>
@@ -441,6 +459,6 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
   <script src="firebase-config.js"></script>
-  <script src="admin.js?v=59"></script>
+  <script src="admin.js?v=62"></script>
 </body>
 </html>
