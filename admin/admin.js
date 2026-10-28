@@ -1634,7 +1634,7 @@ function printInternalQuotationDocument(data) {
     </tr>`).join('');
 
   const html = `<!doctype html><html><head><base href="${location.href}"><title>${safe(customerFileTitle('Internal_Quote', data.no, data.customer, data.useCustomerFileName))}</title><style>
-    @page{size:A4;margin:10mm}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}.print-btn{position:fixed;right:12px;top:12px;z-index:10;border:0;border-radius:999px;background:#d4af37;color:#111;font-weight:900;padding:10px 16px;cursor:pointer}@media print{.print-btn{display:none}}.head{border-bottom:3px solid #d4af37;background:#111;color:#fff;padding:14px 16px;margin-bottom:12px}.brand{display:flex;align-items:center;gap:12px}.brand img{width:50px;height:50px;object-fit:contain}.title{margin-left:auto;text-align:right}.title h1{margin:0;color:#d4af37;font-size:22px}.title p{margin:4px 0 0;font-size:12px}.warning{background:#fff3cd;border:1px solid #d4af37;padding:8px 11px;font-weight:700;margin:8px 0 12px}.meta{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px}.meta div{background:#f2f2f2;padding:8px 10px;border-radius:6px}.meta b{display:block;font-size:10px;color:#555;text-transform:uppercase}.meta span{font-size:13px;font-weight:700}.section-title{font-size:13px;font-weight:900;color:#111;border-left:5px solid #d4af37;padding-left:8px;margin:14px 0 8px}table{width:100%;border-collapse:collapse;font-size:9.3px;page-break-inside:auto}th{background:#111;color:#d4af37;text-align:left;padding:6px 5px;border:1px solid #333}td{padding:5px;border:1px solid #ccc;vertical-align:top}tr:nth-child(even) td{background:#f7f7f7}.text-right{text-align:right}.summary{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px;page-break-inside:avoid}.summary div{display:flex;justify-content:space-between;background:#f2f2f2;padding:8px 10px;border-radius:4px;font-size:11px}.summary .final{background:#d4af37;font-weight:900}.notes{margin-top:12px;font-size:10.5px;color:#333}.footer-note{margin-top:10px;font-size:10px;color:#777;font-weight:700}.page-break{page-break-inside:avoid}${PAPER_TOOLBAR_CSS}</style></head><body>${PAPER_TOOLBAR_HTML}<section class="head"><div class="brand"><img src="../assets/logo.png" alt="Trini-D"><div><strong>TRINI-D 3D Printing</strong><br><small>Internal quotation copy</small></div><div class="title"><h1>INTERNAL QUOTATION</h1><p># ${safe(data.no)}</p></div></div></section><div class="warning">INTERNAL COPY ONLY — Do not send this PDF to the customer.</div><section class="meta"><div><b>Customer</b><span>${safe(data.customer || 'Customer')}</span></div><div><b>Date</b><span>${safe(prettyDate(data.date))}</span></div><div><b>Quote No</b><span>${safe(data.no)}</span></div></section><div class="section-title">Customer Quotation Details</div><table><thead><tr><th>#</th><th>Model / Description</th><th>Qty</th><th>Unit Price</th><th>Discount</th><th>Layer</th><th>Walls</th><th>Support</th><th>Infill</th><th>Total</th></tr></thead><tbody>${customerRows}</tbody></table><div class="section-title">Internal Cost & Profit Details</div><table><thead><tr><th>#</th><th>Model</th><th>Part Time</th><th>Part Weight</th><th>Electricity Cost</th><th>Filament Cost</th><th>Machine Cost</th><th>Total Cost</th><th>Profit</th><th>Profit Margin</th></tr></thead><tbody>${internalRows}</tbody></table><section class="summary page-break"><div><span>Total Weight</span><b>${formatNumber(totals.weightG)} g</b></div><div><span>Total Time</span><b>${minutesLabel(totals.printMinutes)}</b></div><div><span>Total Electricity Cost</span><b>${formatMoneyDot(totals.electricity)}</b></div><div><span>Total Filament Cost</span><b>${formatMoneyDot(totals.filament)}</b></div><div><span>Total Machine Cost</span><b>${formatMoneyDot(totals.machine)}</b></div><div><span>Total Cost</span><b>${formatMoneyDot(totals.cost)}</b></div><div><span>Subtotal</span><b>${formatMoneyDot(totals.price + items.reduce((s,i) => s + i.discount, 0))}</b></div><div><span>Total Discount</span><b>- ${formatMoneyDot(items.reduce((s,i) => s + i.discount, 0))}</b></div><div><span>Customer Quotation Total</span><b>${formatMoneyDot(totals.price)}</b></div><div class="final"><span>Total Profit</span><b>${formatMoneyDot(totals.profit)}</b></div></section>${data.notes ? `<section class="notes"><b>Notes:</b><br>${safe(data.notes).split('\n').join('<br>')}</section>` : ''}<div class="footer-note">This internal PDF includes cost, time, weight, and profit details for business use only.</div>${paperSizeScript('flow', '10mm')}<script>window.onload = () => setTimeout(() => window.print(), 500);</script></body></html>`;
+    @page{size:A4;margin:10mm}*{box-sizing:border-box}body{font-family:Arial,Helvetica,sans-serif;color:#111;margin:0;-webkit-print-color-adjust:exact;print-color-adjust:exact}.print-btn{position:fixed;right:12px;top:12px;z-index:10;border:0;border-radius:999px;background:#d4af37;color:#111;font-weight:900;padding:10px 16px;cursor:pointer}@media print{.print-btn{display:none}}.head{border-bottom:3px solid #d4af37;background:#111;color:#fff;padding:14px 16px;margin-bottom:12px}.brand{display:flex;align-items:center;gap:12px}.brand img{width:50px;height:50px;object-fit:contain}.title{margin-left:auto;text-align:right}.title h1{margin:0;color:#d4af37;font-size:22px}.title p{margin:4px 0 0;font-size:12px}.warning{background:#fff3cd;border:1px solid #d4af37;padding:8px 11px;font-weight:700;margin:8px 0 12px}.meta{display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px}.meta div{background:#f2f2f2;padding:8px 10px;border-radius:6px}.meta b{display:block;font-size:10px;color:#555;text-transform:uppercase}.meta span{font-size:13px;font-weight:700}.section-title{font-size:13px;font-weight:900;color:#111;border-left:5px solid #d4af37;padding-left:8px;margin:14px 0 8px}table{width:100%;border-collapse:collapse;font-size:9.3px;page-break-inside:auto}th{background:#111;color:#d4af37;text-align:left;padding:6px 5px;border:1px solid #333}td{padding:5px;border:1px solid #ccc;vertical-align:top}tr:nth-child(even) td{background:#f7f7f7}.text-right{text-align:right}.summary{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-top:12px;page-break-inside:avoid}.summary div{display:flex;justify-content:space-between;background:#f2f2f2;padding:8px 10px;border-radius:4px;font-size:11px}.summary .final{background:#d4af37;font-weight:900}.notes{margin-top:12px;font-size:10.5px;color:#333}.footer-note{margin-top:10px;font-size:10px;color:#777;font-weight:700}.page-break{page-break-inside:avoid}${PAPER_TOOLBAR_CSS}</style></head><body>${PAPER_TOOLBAR_HTML}<section class="head"><div class="brand"><img src="../assets/logo.png?v=58" alt="Trini-D"><div><strong>TRINI-D 3D Printing</strong><br><small>Internal quotation copy</small></div><div class="title"><h1>INTERNAL QUOTATION</h1><p># ${safe(data.no)}</p></div></div></section><div class="warning">INTERNAL COPY ONLY — Do not send this PDF to the customer.</div><section class="meta"><div><b>Customer</b><span>${safe(data.customer || 'Customer')}</span></div><div><b>Date</b><span>${safe(prettyDate(data.date))}</span></div><div><b>Quote No</b><span>${safe(data.no)}</span></div></section><div class="section-title">Customer Quotation Details</div><table><thead><tr><th>#</th><th>Model / Description</th><th>Qty</th><th>Unit Price</th><th>Discount</th><th>Layer</th><th>Walls</th><th>Support</th><th>Infill</th><th>Total</th></tr></thead><tbody>${customerRows}</tbody></table><div class="section-title">Internal Cost & Profit Details</div><table><thead><tr><th>#</th><th>Model</th><th>Part Time</th><th>Part Weight</th><th>Electricity Cost</th><th>Filament Cost</th><th>Machine Cost</th><th>Total Cost</th><th>Profit</th><th>Profit Margin</th></tr></thead><tbody>${internalRows}</tbody></table><section class="summary page-break"><div><span>Total Weight</span><b>${formatNumber(totals.weightG)} g</b></div><div><span>Total Time</span><b>${minutesLabel(totals.printMinutes)}</b></div><div><span>Total Electricity Cost</span><b>${formatMoneyDot(totals.electricity)}</b></div><div><span>Total Filament Cost</span><b>${formatMoneyDot(totals.filament)}</b></div><div><span>Total Machine Cost</span><b>${formatMoneyDot(totals.machine)}</b></div><div><span>Total Cost</span><b>${formatMoneyDot(totals.cost)}</b></div><div><span>Subtotal</span><b>${formatMoneyDot(totals.price + items.reduce((s,i) => s + i.discount, 0))}</b></div><div><span>Total Discount</span><b>- ${formatMoneyDot(items.reduce((s,i) => s + i.discount, 0))}</b></div><div><span>Customer Quotation Total</span><b>${formatMoneyDot(totals.price)}</b></div><div class="final"><span>Total Profit</span><b>${formatMoneyDot(totals.profit)}</b></div></section>${data.notes ? `<section class="notes"><b>Notes:</b><br>${safe(data.notes).split('\n').join('<br>')}</section>` : ''}<div class="footer-note">This internal PDF includes cost, time, weight, and profit details for business use only.</div>${paperSizeScript('flow', '10mm')}<script>window.onload = () => setTimeout(() => window.print(), 500);</script></body></html>`;
   const win = window.open('', '_blank');
   win.document.write(html);
   win.document.close();
@@ -1719,6 +1719,21 @@ const INVOICE_DESKTOP_CSS = `
 .inv .qr-caption{right:18mm;top:81.5pt;width:68pt;font-size:6.5pt;color:#ccc;text-align:center;line-height:1;white-space:nowrap}
 .inv .page-line{bottom:auto;top:818.95pt;font-size:7pt;color:#ccc;line-height:1;white-space:pre}
 `;
+// Quotation overrides on top of INVOICE_DESKTOP_CSS (header, panel, footer are identical in the desktop code).
+// Columns are centred between the desktop col_x edges; baselines converted as top = baseline - 0.8465 * font-size.
+const QUOTE_DESKTOP_CSS = `
+.qt .table-head{font-size:7.5pt}
+.qt .th{top:10.65pt;text-align:center}
+.qt .th:first-child{left:4pt;text-align:left}
+.qt .td{top:6.38pt;text-align:center;overflow:visible;text-overflow:clip}
+.qt .td.q-model{left:4pt;width:auto;text-align:left;font-weight:700;color:#111}
+.qt .td.q-qty{font-weight:700;color:#2d2d2d}
+.qt .td.q-unit,.qt .td.q-spec{top:7.23pt;font-size:8pt;font-weight:400;color:#2d2d2d}
+.qt .td.q-disc{top:7.23pt;font-size:8pt;font-weight:400;color:#cc3333}
+.qt .td.q-total{right:4pt;left:auto;width:auto;text-align:right;font-weight:700;color:#111}
+.qt .quote-sub{position:absolute;left:4pt;top:18.07pt;font-size:7pt;font-style:italic;color:#777;line-height:1;white-space:pre}
+.qt .t-bar{height:24pt;padding:6pt 6pt 0;font-size:13pt}
+`;
 // Right-edge offsets (pt, measured from the table's right edge) copied from the desktop column layout.
 const INVOICE_COLS_DISC = { qty: 270.457, unit: 202.425, disc: 123.055, tot: 4 };
 const INVOICE_COLS_PLAIN = { qty: 242.11, unit: 151.402, tot: 4 };
@@ -1759,9 +1774,16 @@ function printDocument(data) {
   const hasInvoiceDiscount = isInvoice && preparedItems.some(item => item.discount > 0);
   const hasQuoteDiscount = !isInvoice && preparedItems.some(item => item.discount > 0);
 
-  const quoteHeaders = hasQuoteDiscount
-    ? `<div class="th q-model-disc">MODEL / DESCRIPTION</div><div class="th q-qty-disc">Quantity</div><div class="th q-unit-disc">UNIT PRICE</div><div class="th q-discount-disc">DISCOUNT</div><div class="th q-layer-disc">LAYER</div><div class="th q-walls-disc">WALLS</div><div class="th q-infill-disc">INFILL</div><div class="th q-total-disc">TOTAL</div>`
-    : `<div class="th c-model">MODEL / DESCRIPTION</div><div class="th c-qty">Quantity</div><div class="th c-unit">UNIT PRICE</div><div class="th c-layer">LAYER</div><div class="th c-walls">WALLS</div><div class="th c-infill">INFILL</div><div class="th c-total">TOTAL</div>`;
+  // Quotation columns copied from the desktop generator (mm from the table's left edge, i.e. col_x - 18mm).
+  const MM_PT = 72 / 25.4;
+  const quoteColsMm = hasQuoteDiscount ? [0, 40, 54, 77, 98, 119, 140, 161, 174] : [0, 48, 62, 86, 108, 130, 150, 174];
+  const quoteHeadLabels = hasQuoteDiscount
+    ? ['MODEL / DESCRIPTION', 'QUANTITY', 'UNIT PRICE', 'DISCOUNT', 'LAYER', 'WALLS', 'INFILL', 'TOTAL']
+    : ['MODEL / DESCRIPTION', 'QUANTITY', 'UNIT PRICE', 'LAYER', 'WALLS', 'INFILL', 'TOTAL'];
+  const quoteCellBox = i => `left:${(quoteColsMm[i] * MM_PT).toFixed(2)}pt;width:${((quoteColsMm[i + 1] - quoteColsMm[i]) * MM_PT).toFixed(2)}pt`;
+  const quoteHeaders = quoteHeadLabels.map((label, i) => i === 0
+    ? `<div class="th">${label}</div>`
+    : `<div class="th" style="${quoteCellBox(i)}">${label}</div>`).join('');
   const invCols = hasInvoiceDiscount ? INVOICE_COLS_DISC : INVOICE_COLS_PLAIN;
   const invoiceHeaders = hasInvoiceDiscount
     ? `<div class="th inv-th-model">MODEL / DESCRIPTION</div><div class="th" style="right:${invCols.qty}pt">QUANTITY</div><div class="th" style="right:${invCols.unit}pt">UNIT PRICE</div><div class="th" style="right:${invCols.disc}pt">DISCOUNT</div><div class="th" style="right:${invCols.tot}pt">TOTAL</div>`
@@ -1771,24 +1793,24 @@ function printDocument(data) {
     const lineTotal = Math.max(0, (item.qty * item.unitPrice) - item.discount);
     const rowClass = index % 2 === 0 ? 'row-light' : 'row-white';
     if (!isInvoice) {
-      const weight = showItemWeight ? (item.weight || '') : '';
-      const printTime = showItemPrintTime ? (item.printTime || '') : '';
+      const weight = showItemWeight ? String(item.weight || '').trim() : '';
+      const printTime = showItemPrintTime ? String(item.printTime || '').trim() : '';
       const descriptionParts = [];
       if (showItemMaterial && item.materialType) descriptionParts.push(`Material: ${item.materialType}`);
       if (showItemColor && item.color) descriptionParts.push(`Color: ${item.color}`);
-      const extra = weight || printTime || descriptionParts.length ? 16 : 0;
+      if (weight) descriptionParts.push(`Weight: ${safe(weight)}`);
+      if (printTime) descriptionParts.push(`Time: ${safe(printTime)}`);
+      const rowHeight = 22 + (descriptionParts.length ? 16 : 0);
       return {
-        height: 22 + extra,
+        height: rowHeight,
         html: top => {
-          const subParts = [];
-          descriptionParts.forEach(part => subParts.push(safe(part)));
-          if (weight) subParts.push(`⚖ ${safe(weight)}`);
-          if (printTime) subParts.push(`⏱ ${safe(printTime)}`);
-          const sub = subParts.length ? `<div class="quote-sub" style="top:22pt">${subParts.join('   |   ')}</div>` : '';
-          if (hasQuoteDiscount) {
-            return `<div class="doc-row quote-row ${rowClass}" style="top:${top}pt;height:${22 + extra}pt"><div class="td q-model-disc">${safe(item.model).slice(0, 28)}</div><div class="td q-qty-disc">${item.qty}</div><div class="td q-unit-disc">${formatMoneyDot(item.unitPrice)}</div><div class="td q-discount-disc">${item.discount > 0 ? `- ${formatMoneyDot(item.discount)}` : '-'}</div><div class="td q-layer-disc">${item.layer}</div><div class="td q-walls-disc">${item.walls}</div><div class="td q-infill-disc">${item.infill}</div><div class="td q-total-disc">${formatMoneyDot(lineTotal)}</div>${sub}</div>`;
-          }
-          return `<div class="doc-row quote-row ${rowClass}" style="top:${top}pt;height:${22 + extra}pt"><div class="td q-model">${safe(item.model).slice(0, 30)}</div><div class="td q-qty">${item.qty}</div><div class="td q-unit">${formatMoneyDot(item.unitPrice)}</div><div class="td q-layer">${item.layer}</div><div class="td q-walls">${item.walls}</div><div class="td q-infill">${item.infill}</div><div class="td q-total">${formatMoneyDot(lineTotal)}</div>${sub}</div>`;
+          const sub = descriptionParts.length ? `<div class="quote-sub">   ${descriptionParts.join('   |   ')}</div>` : '';
+          const cell = (i, cls, text) => `<div class="td ${cls}" style="${quoteCellBox(i)}">${text}</div>`;
+          const layerWallsInfill = i0 => `${cell(i0, 'q-spec', item.layer)}${cell(i0 + 1, 'q-spec', item.walls)}${cell(i0 + 2, 'q-spec', item.infill)}`;
+          const middle = hasQuoteDiscount
+            ? `${cell(2, 'q-unit', formatNumber(item.unitPrice))}${cell(3, 'q-disc', item.discount > 0 ? `- ${formatMoneyDot(item.discount)}` : '-')}${layerWallsInfill(4)}`
+            : `${cell(2, 'q-unit', formatNumber(item.unitPrice))}${layerWallsInfill(3)}`;
+          return `<div class="doc-row quote-row ${rowClass}" style="top:${top}pt;height:${rowHeight}pt"><div class="td q-model">${safe(item.model).slice(0, 30)}</div>${cell(1, 'q-qty', item.qty)}${middle}<div class="td q-total">${formatMoneyDot(lineTotal)}</div>${sub}</div>`;
         }
       };
     }
@@ -1816,64 +1838,29 @@ function printDocument(data) {
 
   const rowInfos = preparedItems.map(rowInfo);
   const chunks = [];
+  // Same pagination rule as the desktop generator (limits measured from the top of the page, in pt).
+  const rowsLimit = 700.205;
+  let cur = [], curH = 0, rowTop = 220;
+  rowInfos.forEach(info => {
+    if (cur.length && rowTop + info.height > rowsLimit) {
+      chunks.push({ rows: cur, height: curH });
+      cur = []; curH = 0; rowTop = 154;
+    }
+    cur.push(info); curH += info.height; rowTop += info.height;
+  });
+  chunks.push({ rows: cur, height: curH });
+  const notesLineCount = String(data.notes || '').split('\n').filter(l => l.trim()).length;
+  let totalNeeded;
   if (isInvoice) {
-    // Same pagination rule as the desktop generator (limits measured from the top of the page, in pt).
-    const rowsLimit = 700.205;
-    let cur = [], curH = 0, rowTop = 220;
-    rowInfos.forEach(info => {
-      if (cur.length && rowTop + info.height > rowsLimit) {
-        chunks.push({ rows: cur, height: curH });
-        cur = []; curH = 0; rowTop = 154;
-      }
-      cur.push(info); curH += info.height; rowTop += info.height;
-    });
-    chunks.push({ rows: cur, height: curH });
-    const notesLineCount = String(data.notes || '').split('\n').filter(l => l.trim()).length;
-    let totalNeeded = 32;
+    totalNeeded = 32;
     if (data.totals.discount > 0) totalNeeded += 48;
     if (data.totals.advance > 0) totalNeeded += 48;
     if (notesLineCount) totalNeeded += 24 + notesLineCount * 12;
-    if (rowTop + totalNeeded > rowsLimit) chunks.push({ rows: [], height: 0 });
   } else {
-  let current = [], height = 0;
-  const maxRowsHeight = 410;
-  rowInfos.forEach(info => {
-    if (current.length && height + info.height > maxRowsHeight) {
-      chunks.push({ rows: current, height });
-      current = [];
-      height = 0;
-    }
-    current.push(info);
-    height += info.height;
-  });
-  chunks.push({ rows: current, height });
+    totalNeeded = 50 + (notesLineCount ? 24 + notesLineCount * 12 : 0);
   }
+  if (rowTop + totalNeeded > rowsLimit) chunks.push({ rows: [], height: 0 });
 
-  const totalsHtml = (() => {
-    if (!isInvoice) {
-      const parts = [];
-      if (data.totals.discount > 0) {
-        parts.push(`<div class="total-mini"><span>Subtotal</span><b>${formatMoneyDot(data.totals.subtotal)}</b></div>`);
-        parts.push(`<div class="total-mini red"><span>Total Discount</span><b>- ${formatMoneyDot(data.totals.discount)}</b></div>`);
-      }
-      parts.push(`<div class="total-quote"><span>${totalLabel}</span><b>${formatMoneyDot(data.totals.total)}</b></div>`);
-      return parts.join('');
-    }
-    const parts = [];
-    if (data.totals.discount > 0) {
-      parts.push(`<div class="total-mini"><span>Subtotal</span><b>${formatMoneyDot(data.totals.subtotal)}</b></div>`);
-      parts.push(`<div class="total-mini red"><span>Total Discount</span><b>- ${formatMoneyDot(data.totals.discount)}</b></div>`);
-    }
-    parts.push(`<div class="total-main"><span>TOTAL</span><b>${formatMoneyDot(data.totals.total)}</b></div>`);
-    if (data.totals.advance > 0) {
-      parts.push(`<div class="total-mini red"><span>Advance Paid</span><b>- ${formatMoneyDot(data.totals.advance)}</b></div>`);
-      parts.push(`<div class="total-balance"><span>BALANCE DUE</span><b>${formatMoneyDot(data.totals.balance)}</b></div>`);
-    }
-    return parts.join('');
-  })();
-  const notesHtml = data.notes ? `<section class="notes"><b>NOTES</b>${safe(data.notes).split('\n').map(line => `<span>${line}</span>`).join('')}</section>` : '';
-  const finalNeedsOwnPage = !isInvoice && chunks.length && chunks[chunks.length - 1].height > (data.notes ? 280 : 335);
-  if (finalNeedsOwnPage) chunks.push({ rows: [], height: 0 });
   const pageCount = Math.max(1, chunks.length);
 
   // Desktop-identical totals block for invoices. t0 = top (pt) of the first row.
@@ -1902,31 +1889,54 @@ function printDocument(data) {
     }
     return parts.join('');
   }
+  // Desktop-identical totals block for quotations. t0 = bottom edge (pt from page top) of the last table row.
+  function quoteTotalsAndNotes(t0) {
+    const parts = [];
+    const ty = t0 + 14;
+    let cur = ty;
+    const row = (label, amountText, base, red) => `<div class="t-row${red ? ' red' : ''}" style="top:${(base + 10 - 7.62).toFixed(2)}pt"><span class="lbl">${label}</span><span class="amt">${amountText}</span></div>`;
+    if (data.totals.discount > 0) {
+      parts.push(row('Subtotal', formatMoneyDot(data.totals.subtotal), cur, false));
+      parts.push(row('Total Discount', `- ${formatMoneyDot(data.totals.discount)}`, cur + 20, true));
+      cur += 42;
+    }
+    parts.push(`<div class="t-bar gold" style="top:${(cur - 2).toFixed(2)}pt"><span>${totalLabel}</span><span>${formatMoneyDot(data.totals.total)}</span></div>`);
+    const noteLines = String(data.notes || '').split('\n').filter(l => l.trim());
+    if (noteLines.length) {
+      let base = ty + 50;
+      parts.push(`<div class="inv-notes-title" style="top:${(base - 6.77).toFixed(2)}pt">NOTES</div>`);
+      noteLines.forEach(line => {
+        base += 12;
+        parts.push(`<div class="inv-notes-line" style="top:${(base - 6.77).toFixed(2)}pt">${safe(line.slice(0, 95))}</div>`);
+      });
+    }
+    return parts.join('');
+  }
   const invoiceMotto = '<div class="header-motto"><span style="left:139.02pt">       THREE  DIMENTIONS    -    </span><span class="gold" style="left:214.04pt">        ENDLESS</span><span style="left:257.39pt"> POSSIBILITIES</span></div>';
 
   function renderPage(chunk, pageIndex) {
     let top = 0;
     const rowsHtml = chunk.rows.map(info => { const html = info.html(top); top += info.height; return html; }).join('');
     const tableHeightPt = chunk.rows.length ? 26 + top : 0;
-    const tableTopPt = (isInvoice && pageIndex > 0) ? 128 : 194;
+    const tableTopPt = pageIndex > 0 ? 128 : 194;
     const tableHtml = chunk.rows.length ? `<section class="table-wrap" style="top:${tableTopPt}pt;height:${tableHeightPt}pt"><div class="table-head">${isInvoice ? invoiceHeaders : quoteHeaders}</div><div class="rows" style="position:absolute;left:0;top:26pt;width:100%;height:${top}pt">${rowsHtml}</div></section>` : '';
     const isLast = pageIndex === pageCount - 1;
-    const totalsTop = chunk.rows.length ? Math.min(650, 194 + tableHeightPt + 12) : 218;
-    const isFirstPage = pageIndex === 0;
-    const invTotalsT0 = (chunk.rows.length ? tableTopPt + tableHeightPt : 154) + 14;
-    const titleText = (isInvoice && !isFirstPage) ? `${docWord} CONT.` : docWord;
-    const mottoHtml = isInvoice ? invoiceMotto : '<div class="header-motto">THREE&nbsp; DIMENTIONS&nbsp;&nbsp; - &nbsp;&nbsp;<span class="gold">ENDLESS</span>&nbsp; POSSIBILITIES</div>';
-    const partyHtml = (!isInvoice || isFirstPage) ? `<section class="panel"></section><div class="label customer-label">${partyLabel}</div><div class="customer-name">${safe(data.customer || 'Customer')}</div><div class="label date-label">DATE</div><div class="date-value">${safe(dateText)}</div><div class="label number-label">${docNoLabel}</div><div class="number-value">${safe(data.no)}</div>` : '';
-    const totalsBlock = !isLast ? '' : (isInvoice ? invoiceTotalsAndNotes(invTotalsT0) : `<section class="totals" style="top:${totalsTop}pt">${totalsHtml}</section>${notesHtml ? notesHtml.replace('<section class="notes"', `<section class="notes" style="top:${Math.min(680, totalsTop + 56)}pt"`) : ''}`);
-    const footerPhone = isInvoice ? '☎  075 16 56 777   |   078 55 24 561' : '☎ &nbsp;075 16 56 777&nbsp;&nbsp; | &nbsp;&nbsp;078 55 24 561';
-    const pageLine = isInvoice ? `Page ${pageIndex + 1} of ${pageCount}  ·  TRINI-D  ·  Three Dimensions - Endless Possibilities` : `Page ${pageIndex + 1} of ${pageCount} &nbsp; · &nbsp; TRINI-D &nbsp; · &nbsp; Three Dimensions - Endless Possibilities`;
-    return `<div class="page${isInvoice ? ' inv' : ''}"><header class="header"><img class="logo" src="../assets/logo.png" alt="Trini-D logo"><img class="brand-name" src="../assets/brand_name.png" alt="TRINI-D 3D Printing">${mottoHtml}<div class="doc-title">${titleText}</div><div class="doc-id-top"># ${safe(data.no)}</div></header>${partyHtml}${tableHtml}${totalsBlock}<footer class="footer"><div class="footer-title">${thanks}</div><div class="footer-phone">${footerPhone}</div><div class="footer-wa">WhatsApp: +94 75 16 56 777</div><div class="footer-motto">Three Dimensions - Endless Possibilities</div><img class="qr" src="../assets/whatsapp-qr.png" alt="WhatsApp QR"><div class="qr-caption">Scan to WhatsApp us</div></footer><div class="page-line">${pageLine}</div></div>`;
+        const isFirstPage = pageIndex === 0;
+    const rowsBottom = chunk.rows.length ? tableTopPt + tableHeightPt : (isFirstPage ? 220 : 154);
+    const invTotalsT0 = rowsBottom + 14;
+    const titleText = !isFirstPage ? `${docWord} CONT.` : docWord;
+    const mottoHtml = invoiceMotto;
+    const partyHtml = isFirstPage ? `<section class="panel"></section><div class="label customer-label">${partyLabel}</div><div class="customer-name">${safe(data.customer || 'Customer')}</div><div class="label date-label">DATE</div><div class="date-value">${safe(dateText)}</div><div class="label number-label">${docNoLabel}</div><div class="number-value">${safe(data.no)}</div>` : '';
+    const totalsBlock = !isLast ? '' : (isInvoice ? invoiceTotalsAndNotes(invTotalsT0) : quoteTotalsAndNotes(rowsBottom));
+    const footerPhone = '☎  075 16 56 777   |   078 55 24 561';
+    const pageLine = `Page ${pageIndex + 1} of ${pageCount}  ·  TRINI-D  ·  Three Dimensions - Endless Possibilities`;
+    return `<div class="page inv${isInvoice ? '' : ' qt'}"><header class="header"><img class="logo" src="../assets/logo.png?v=58" alt="Trini-D logo"><img class="brand-name" src="../assets/brand_name.png?v=58" alt="TRINI-D 3D Printing">${mottoHtml}<div class="doc-title">${titleText}</div><div class="doc-id-top"># ${safe(data.no)}</div></header>${partyHtml}${tableHtml}${totalsBlock}<footer class="footer"><div class="footer-title">${thanks}</div><div class="footer-phone">${footerPhone}</div><div class="footer-wa">WhatsApp: +94 75 16 56 777</div><div class="footer-motto">Three Dimensions - Endless Possibilities</div><img class="qr" src="../assets/whatsapp-qr.png?v=58" alt="WhatsApp QR"><div class="qr-caption">Scan to WhatsApp us</div></footer><div class="page-line">${pageLine}</div></div>`;
   }
 
   const pagesHtml = chunks.map(renderPage).join('');
   const html = `<!doctype html><html><head><base href="${location.href}"><title>${safe(fileTitle)}</title><style>
     @page{size:A4;margin:0}*{box-sizing:border-box}html,body{margin:0;padding:0;background:#fff;color:#111;font-family:Arial,Helvetica,sans-serif;-webkit-print-color-adjust:exact;print-color-adjust:exact}.print-btn{position:fixed;right:12px;top:12px;z-index:50;border:0;border-radius:999px;background:#d4af37;color:#111;font-weight:900;padding:10px 16px;box-shadow:0 10px 30px rgba(0,0,0,.25);cursor:pointer}@media print{.print-btn{display:none}.page{margin:0!important;page-break-after:always}.page:last-child{page-break-after:auto}}.page{width:210mm;height:297mm;margin:0 auto;background:#fff;position:relative;overflow:hidden}.header{position:absolute;left:0;top:0;width:210mm;height:110pt;background:#111;border-bottom:2.5pt solid #d4af37}.logo{position:absolute;left:18mm;top:16pt;width:78pt;height:78pt;object-fit:contain}.brand-name{position:absolute;left:139pt;top:22pt;width:180pt;height:46pt;object-fit:contain}.header-motto{position:absolute;left:139pt;top:76pt;width:180pt;text-align:center;font-size:6pt;font-weight:700;letter-spacing:.02em;white-space:nowrap;color:#e8e8e8;line-height:1}.header-motto .gold{color:#d4af37}.doc-title{position:absolute;right:18mm;top:35pt;text-align:right;color:#fff;font-size:20pt;font-weight:700;line-height:1;letter-spacing:.02em}.doc-id-top{position:absolute;right:18mm;top:67pt;text-align:right;color:#d4af37;font-size:9pt;line-height:1}.panel{position:absolute;left:18mm;top:120pt;width:174mm;height:68pt;background:#f2f2f2;border-radius:6pt}.label{font-size:8pt;font-weight:700;color:#2d2d2d;text-transform:uppercase;line-height:1}.customer-label{position:absolute;left:22mm;top:136pt}.customer-name{position:absolute;left:22mm;top:151pt;font-size:13pt;font-weight:700;color:#111;line-height:1}.date-label{position:absolute;left:405pt;top:133pt}.date-value{position:absolute;left:405pt;top:147pt;font-size:10pt;color:#111;line-height:1}.number-label{position:absolute;left:405pt;top:165pt}.number-value{position:absolute;left:405pt;top:178pt;font-size:8pt;font-weight:700;color:#d4af37;line-height:1}.table-wrap{position:absolute;left:18mm;top:194pt;width:174mm;border-bottom:.5pt solid #ccc}.table-head{position:absolute;left:0;top:0;width:100%;height:26pt;background:#111;border-bottom:1pt solid #d4af37;color:#d4af37;font-size:7.5pt;font-weight:700;text-transform:uppercase;line-height:1}.th{position:absolute;top:10pt;text-align:center;white-space:nowrap}.th:first-child{text-align:left}.doc-row{position:absolute;left:0;width:100%;font-size:9pt;color:#111;line-height:1}.row-light{background:#f2f2f2}.row-white{background:#fff}.td{position:absolute;top:8pt;text-align:center;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.q-model,.i-model,.i-model-disc,.id-model-disc{text-align:left;font-weight:700}.q-total,.i-total,.id-total-disc{font-weight:700;text-align:right}.q-unit,.q-layer,.q-walls,.q-infill,.id-qty-disc{color:#2d2d2d}.id-discount-disc{color:#cc3333}.quote-sub{position:absolute;left:4pt;font-size:7pt;font-style:italic;color:#888;line-height:1}.spec-line{position:absolute;left:4pt;top:21pt}.spec-tag{display:inline-block;background:none;color:#888;padding:0;font-size:7pt;font-style:italic;line-height:1}.c-model{left:4pt;text-align:left}.c-qty{left:136pt;width:40pt}.c-unit{left:190pt;width:68pt}.c-layer{left:271pt;width:58pt}.c-walls{left:333pt;width:59pt}.c-infill{left:395pt;width:55pt}.c-total{right:4pt;width:64pt}.q-model{left:4pt;width:132pt}.q-qty{left:136pt;width:40pt;font-weight:700}.q-unit{left:190pt;width:68pt;font-size:8pt}.q-layer{left:271pt;width:58pt;font-size:8pt}.q-walls{left:333pt;width:59pt;font-size:8pt}.q-infill{left:395pt;width:55pt;font-size:8pt}.q-total{right:4pt;width:70pt}.q-model-disc{left:4pt;width:112pt}.q-qty-disc{left:117pt;width:34pt;font-weight:700}.q-unit-disc{left:160pt;width:60pt;font-size:8pt}.q-discount-disc{left:225pt;width:60pt;font-size:8pt;color:#cc3333}.q-layer-disc{left:290pt;width:44pt;font-size:8pt}.q-walls-disc{left:337pt;width:44pt;font-size:8pt}.q-infill-disc{left:384pt;width:44pt;font-size:8pt}.q-total-disc{right:4pt;width:54pt;font-weight:700;text-align:right}.i-model{left:4pt;width:220pt}.i-qty{left:245pt;width:40pt;font-weight:700}.i-unit{left:310pt;width:85pt}.i-total{right:4pt;width:90pt}.i-model-disc{left:4pt;width:190pt;text-align:left}.i-qty-disc{left:206pt;width:35pt}.i-unit-disc{left:253pt;width:70pt}.i-discount-disc{left:335pt;width:70pt}.i-total-disc{right:4pt;width:76pt}.id-model-disc{left:4pt;width:190pt}.id-qty-disc{left:206pt;width:35pt}.id-unit-disc{left:253pt;width:70pt}.id-discount-disc{left:335pt;width:70pt}.id-total-disc{right:4pt;width:76pt}.totals{position:absolute;right:18mm;width:90mm}.total-quote,.total-main,.total-balance{height:24pt;background:#d4af37;color:#111;font-size:12pt;font-weight:700;line-height:24pt;padding:0 8pt}.total-quote{display:flex;justify-content:space-between}.total-main,.total-balance,.total-mini{display:flex;justify-content:space-between}.total-mini{height:20pt;color:#111;font-size:9pt;line-height:20pt;padding:0 8pt}.total-mini.red{color:#cc3333}.th.q-discount-disc,.th.id-discount-disc,.th.i-discount-disc{color:#d4af37}.total-balance{background:#1a5c2a;color:#4ade80}.notes{position:absolute;left:18mm;width:95mm;font-size:8pt;color:#111}.notes b{display:block;color:#2d2d2d;margin-bottom:4pt}.notes span{display:block;margin-bottom:3pt}.footer{position:absolute;left:0;bottom:38pt;width:210mm;height:90pt;background:#111;border-top:2pt solid #d4af37}.footer-title{position:absolute;left:18mm;top:20pt;color:#d4af37;font-size:13pt;font-weight:700}.footer-phone{position:absolute;left:18mm;top:42pt;color:#fff;font-size:8.5pt}.footer-wa{position:absolute;left:18mm;top:56pt;color:#fff;font-size:8.5pt}.footer-motto{position:absolute;left:18mm;top:70pt;color:#ccc;font-size:7.5pt;font-style:italic}.qr{position:absolute;right:18mm;top:6pt;width:68pt;height:68pt}.qr-caption{position:absolute;right:18mm;top:76pt;width:68pt;text-align:center;color:#ccc;font-size:6.5pt;line-height:1;white-space:nowrap}.page-line{position:absolute;left:0;bottom:15pt;width:210mm;text-align:center;font-size:7pt;color:#bbb}
-  ${isInvoice ? INVOICE_DESKTOP_CSS : ''}${PAPER_TOOLBAR_CSS}${PAPER_SCALE_CSS}</style></head><body>${PAPER_TOOLBAR_HTML}${pagesHtml}${paperSizeScript('scale', '0')}<script>window.onload = () => setTimeout(() => window.print(), 350);</script></body></html>`;
+  ${INVOICE_DESKTOP_CSS}${isInvoice ? '' : QUOTE_DESKTOP_CSS}${PAPER_TOOLBAR_CSS}${PAPER_SCALE_CSS}</style></head><body>${PAPER_TOOLBAR_HTML}${pagesHtml}${paperSizeScript('scale', '0')}<script>window.onload = () => setTimeout(() => window.print(), 350);</script></body></html>`;
   const win = window.open('', '_blank');
   win.document.write(html);
   win.document.close();
