@@ -11,6 +11,9 @@ const INVOICE_BANK_PIN_LOCK_MS = 5 * 60 * 1000;
 const INVOICE_BANK_UNLOCK_MS = 90 * 1000;
 const INVOICE_BANK_FIELDS = [['name','billBankName'], ['holder','billBankHolder'], ['account','billBankAccount'], ['branch','billBankBranch'], ['swift','billBankSwift'], ['reference','billBankReference']];
 const CLOUD_DOC_PATH = 'trinid/default';
+// Only this approved Firebase Authentication identity can enter the admin UI.
+// Firestore rules must independently enforce the same UID.
+const TRINID_ADMIN_UID = '7D4nUPaMXIW6Lnz5ST7A6raV22O2';
 const SMARTQUOTE_CONFIG_DOC_PATH = 'trinid/default/public/smartquote';
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -423,6 +426,17 @@ function initFirebase() {
     firebaseStore = firebase.firestore();
     firebaseAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(() => {});
     firebaseAuth.onAuthStateChanged(user => {
+      // Prevent other email users and anonymous accounts from opening the
+      // cached admin dashboard. Server-side Firestore rules remain mandatory.
+      if (user && user.uid !== TRINID_ADMIN_UID) {
+        firebaseUser = null;
+        stopCloudSync();
+        stopSmartQuoteConfigSync();
+        showLogin();
+        setCloudStatus('Cloud: unauthorized account — use main admin login', 'error');
+        firebaseAuth.signOut().catch(err => console.error('Could not sign out unauthorized account:', err));
+        return;
+      }
       firebaseUser = user || null;
       if (user) {
         showApp();
@@ -586,9 +600,13 @@ function initAuth() {
     const password = $('#adminPassword').value;
     try {
       setCloudStatus('Cloud: signing in...', 'syncing');
-      await firebaseAuth.signInWithEmailAndPassword(email, password);
+      const credential = await firebaseAuth.signInWithEmailAndPassword(email, password);
+      if (credential?.user?.uid !== TRINID_ADMIN_UID) {
+        await firebaseAuth.signOut();
+        throw new Error('This account is not authorized. Sign in with the main Trini-D administrator account.');
+      }
       $('#adminPassword').value = '';
-      toast('Firebase admin signed in');
+      toast('Approved Firebase administrator signed in');
     } catch (err) {
       console.error(err);
       setCloudStatus('Cloud: sign-in failed', 'error');
