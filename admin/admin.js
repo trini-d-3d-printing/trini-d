@@ -930,7 +930,7 @@ function buildSetAllRow(kind) {
     `<th>${setAllInput('set-all-qty', 'Qty')}</th>`,
     `<th></th>`
   ];
-  cells.push(`<th>${setAllInput('set-all-discount', 'Discount')}</th>`);
+  cells.push(`<th><div class="disc-pair">${setAllInput('set-all-discount', 'Discount')}${setAllInput('set-all-discount-pct', '%')}</div></th>`);
   if (isBill) cells.push(`<th></th>`);
   cells.push(
     `<th>${setAllInput('set-all-layer', 'Layer')}</th>`,
@@ -957,6 +957,7 @@ function initSetAllRow(kind) {
     ['.set-all-color', '.color-input'],
     ['.set-all-qty', '.qty-input'],
     ['.set-all-discount', '.discount-input'],
+    ['.set-all-discount-pct', '.discount-pct-input'],
     ['.set-all-layer', '.layer-input'],
     ['.set-all-walls', '.walls-input'],
     ['.set-all-infill', '.infill-input']
@@ -971,6 +972,8 @@ function initSetAllRow(kind) {
       $$(`#${bodyId} tr`).forEach(tr => {
         const target = $(targetSel, tr);
         if (target) target.value = value;
+        if (targetSel === '.discount-input') { const pctEl = $('.discount-pct-input', tr); if (pctEl) pctEl.value = ''; }
+        syncRowDiscountFromPct(tr);
       });
       if (isBill) { recalcBill(); saveBillDraft(); } else { recalcQuote(); saveQuoteDraft(); }
     });
@@ -1062,6 +1065,35 @@ function customerFileTitle(prefix, no, customer, useCustomerName) {
   return `${prefix}_${safeNo}.pdf`;
 }
 
+// Discount cell: Rs amount (default) + optional % box beside it. Typing a % fills the Rs amount automatically.
+function discountCell(discount) {
+  return `<div class="disc-pair">${lineInput(discount || 0, 'discount-input', 'number')}<input class="discount-pct-input" type="text" inputmode="decimal" placeholder="%" title="Optional: type a discount % and the Rs amount is calculated for you"></div>`;
+}
+
+function syncRowDiscountFromPct(tr) {
+  const pctEl = $('.discount-pct-input', tr);
+  const discEl = $('.discount-input', tr);
+  if (!pctEl || !discEl || pctEl.value.trim() === '') return;
+  const pct = Math.min(100, Math.max(0, num(pctEl.value)));
+  if (num(pctEl.value) > 100) pctEl.value = '100';
+  const qty = num($('.qty-input', tr)?.value) || 1;
+  const unit = ceilCurrency($('.unit-input', tr)?.value);
+  discEl.value = String(ceilCurrency(qty * unit * pct / 100));
+}
+
+// Runs before the normal recalculation listeners (registered first in the init code).
+function handleDiscountPercentInput(e) {
+  const el = e.target;
+  const tr = el.closest('tr');
+  if (!tr) return;
+  if (el.classList.contains('discount-input')) {
+    const pctEl = $('.discount-pct-input', tr);
+    if (pctEl) pctEl.value = '';          // typing the Rs amount takes over from the %
+  } else if (el.classList.contains('discount-pct-input') || el.classList.contains('qty-input') || el.classList.contains('unit-input')) {
+    syncRowDiscountFromPct(tr);
+  }
+}
+
 function addBillRow(data = {}) {
   const tr = document.createElement('tr');
   tr.dataset.calcKey = data.calcKey || '';
@@ -1071,7 +1103,7 @@ function addBillRow(data = {}) {
     <td>${lineSelect(hasOwn(data, 'color') ? colorText(data) : 'Black', 'color-input', LINE_COLOR_OPTIONS, 'Black')}</td>
     <td>${lineInput(data.qty || 1, 'qty-input', 'number')}</td>
     <td>${lineInput(data.unitPrice ?? data.unit ?? '', 'unit-input', 'number')}</td>
-    <td>${lineInput(data.discount || 0, 'discount-input', 'number')}</td>
+    <td>${discountCell(data.discount)}</td>
     <td>${lineInput(data.cost || 0, 'cost-input', 'number')}</td>
     <td>${lineInput(data.layer || '0.2', 'layer-input')}</td>
     <td><select class="walls-input"><option></option>${['1','2','3','4','5','6','Custom'].map(v => `<option${data.walls == v ? ' selected' : ''}>${v}</option>`).join('')}</select></td>
@@ -1097,7 +1129,7 @@ function addQuoteRow(data = {}) {
     <td>${lineSelect(hasOwn(data, 'color') ? colorText(data) : 'Black', 'color-input', LINE_COLOR_OPTIONS, 'Black')}</td>
     <td>${lineInput(data.qty || 1, 'qty-input', 'number')}</td>
     <td>${lineInput(data.unitPrice ?? data.unit ?? '', 'unit-input', 'number')}</td>
-    <td>${lineInput(data.discount || 0, 'discount-input', 'number')}</td>
+    <td>${discountCell(data.discount)}</td>
     <td>${lineInput(data.layer || '0.2', 'layer-input')}</td>
     <td><select class="walls-input">${['1','2','3','4','5','6','Custom'].map(v => `<option${data.walls == v ? ' selected' : ''}>${v}</option>`).join('')}</select></td>
     <td>${lineInput(data.infill || '', 'infill-input')}</td>
@@ -1359,6 +1391,7 @@ function recalcBill() {
 
 function recalcQuote() {
   const totals = quoteTotals();
+  if ($('#quoteSubtotal')) $('#quoteSubtotal').textContent = money(totals.subtotal);
   if ($('#quoteServiceTotal')) $('#quoteServiceTotal').textContent = money(totals.serviceCharge);
   if ($('#quoteDiscount')) $('#quoteDiscount').textContent = money(totals.discount);
   $('#quoteGrandTotal').textContent = money(totals.total);
@@ -1394,6 +1427,8 @@ function initBillQuote() {
   ['billCustomer', 'invoiceNo', 'billDate', 'billPaidStatus', 'billPaidMethod', 'billAdvance', 'billNotes', 'billServiceName', 'billServiceCharge'].forEach(key => $(`#${key}`)?.addEventListener('input', () => { recalcBill(); saveBillDraft(); }));
   ['quoteShowMaterial', 'quoteShowColor', 'quoteShowWeight', 'quoteShowPrintTime', 'quoteUseCustomerFileName'].forEach(key => $(`#${key}`)?.addEventListener('change', () => { writeCustomerPdfOptions(); saveQuoteDraft(); }));
   ['billShowMaterial', 'billShowColor', 'billShowWeight', 'billShowPrintTime', 'billUseCustomerFileName'].forEach(key => $(`#${key}`)?.addEventListener('change', () => { writeCustomerPdfOptions(); saveBillDraft(); }));
+  $('#billItemsBody').addEventListener('input', handleDiscountPercentInput);
+  $('#quoteItemsBody').addEventListener('input', handleDiscountPercentInput);
   $('#billItemsBody').addEventListener('input', () => { recalcBill(); saveBillDraft(); });
   $('#billItemsBody').addEventListener('change', () => { recalcBill(); saveBillDraft(); });
   $('#quoteItemsBody').addEventListener('input', () => { recalcQuote(); saveQuoteDraft(); });

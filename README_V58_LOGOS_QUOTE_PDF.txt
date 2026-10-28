@@ -20,7 +20,11 @@ TriniD Website v58 — New logos + desktop-identical quotation PDF
    website PDF with the same data and overlaying them.
    Invoice PDFs are untouched (verified identical to v57 output).
 
-3. Quotation discount
-   Already present in both v57 website and desktop v3.0.3 (Discount column,
-   Set All, per-line clamp, Subtotal / Total Discount in the PDF). No change
-   was needed; the desktop .py is not modified in this release.
+3. Quotation discount summary (same as the Invoice section)
+   The quotation editor already had a Discount column + Set All. What the
+   invoice section had and the quotation did not was the running
+   Subtotal / Discount / Total summary. Website: added a "Subtotal" box to
+   the Quotation summary (admin/index.html, admin/admin.js recalcQuote).
+   Desktop (TriniD_Desktop_v3_0_4.py, supplied separately): the Quotation tab
+   now has a per-line Total column and a Subtotal / Discount / TOTAL QUOTE
+   summary, updated live, like the Bill tab.

@@ -415,3 +415,8 @@ input[type="number"]::-webkit-inner-spin-button {
 .advance-options .advance-amount-field[hidden]{display:none!important}
 #section-bill .summary-grid{grid-template-columns:repeat(3,1fr)}
 @media(max-width:720px){#section-bill .summary-grid{grid-template-columns:1fr}}
+/* v58: optional discount % box beside the Rs discount amount */
+.disc-pair{display:flex;gap:6px;align-items:center}
+.line-editor .disc-pair input,.set-all-row .disc-pair input{min-width:0}
+.line-editor .disc-pair input.discount-input,.set-all-row .disc-pair input.set-all-discount{flex:1 1 auto;min-width:80px}
+.disc-pair .discount-pct-input,.disc-pair .set-all-discount-pct{flex:0 0 64px;width:64px;min-width:64px}
