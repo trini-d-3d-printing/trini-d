@@ -11,19 +11,52 @@ const INVOICE_BANK_PIN_LOCK_MS = 5 * 60 * 1000;
 const INVOICE_BANK_UNLOCK_MS = 90 * 1000;
 const INVOICE_BANK_FIELDS = [['name','billBankName'], ['holder','billBankHolder'], ['account','billBankAccount'], ['branch','billBankBranch'], ['swift','billBankSwift'], ['reference','billBankReference']];
 const CLOUD_DOC_PATH = 'trinid/default';
-// Editor authorization is read from Firestore role documents, not hardcoded UID.
-// Firestore Security Rules MUST independently enforce editor-only writes.
+// Both registered roles can use every section and read all business records.
+// Only the Editor may create, update or delete SHARED database records.
+// Firestore rules separately enforce the same permissions server-side.
 const TRINID_ROLE_COLLECTION = 'trinid_roles';
-async function isApprovedEditorUser(user) {
-  if (!user || !firebaseStore) return false;
+async function getApprovedTriniDRole(user) {
+  if (!user || !firebaseStore) return null;
   try {
     const doc = await firebaseStore.doc(`${TRINID_ROLE_COLLECTION}/${user.uid}`)
       .get({ source: 'server' });
-    return doc.exists && doc.data()?.role === 'editor';
+    const role = doc.exists ? doc.data()?.role : null;
+    return role === 'editor' || role === 'viewer' ? role : null;
   } catch (err) {
-    console.warn('Could not verify editor role:', err);
-    return false;
+    console.warn('Could not verify Trini-D role:', err);
+    return null;
   }
+}
+function canEditSharedRecords() { return firebaseUserRole === 'editor'; }
+function requireEditorWrite() {
+  if (canEditSharedRecords()) return true;
+  toast('Viewer access: Shared database records cannot be created, edited or deleted.');
+  return false;
+}
+function applyRoleUi() {
+  const viewer = firebaseUserRole === 'viewer';
+  document.body.classList.toggle('trinid-viewer-mode', viewer);
+  const heading = $('#roleIndicator');
+  if (heading) heading.textContent = viewer ? 'VIEWER · all features · shared records read-only' : 'EDITOR · full database access';
+  const writeSelectors = [
+    '#saveCalcBtn', '#createCustomGroupBtn', '#addSelectedToCustomBtn',
+    '#addSelectedToOrdersBtn', '#budgetSaveBtn', '#syncBudgetBtn',
+    '#importJsonInput', '#importDesktopDbInput', '#clearDbBtn',
+    '#saveInvoiceBankBtn', '#saveSmartQuoteConfigBtn', '#resetSmartQuoteConfigBtn'
+  ];
+  for (const selector of writeSelectors) {
+    const element = $(selector);
+    if (!element) continue;
+    element.disabled = viewer;
+    element.title = viewer ? 'Editor only: this action changes shared records' : '';
+  }
+  // Dynamic action buttons are rebuilt whenever the records table refreshes.
+  $$('[data-edit-item],[data-edit-order],[data-delete],[data-budget-edit],[data-item-to-order],'+
+     '[data-order-paid]').forEach(element => {
+    element.disabled = viewer;
+    element.title = viewer ? 'Editor only: changes shared records' : '';
+  });
+  // G-code, reporting, browsing, export and PDF controls remain accessible.
 }
 const SMARTQUOTE_CONFIG_DOC_PATH = 'trinid/default/public/smartquote';
 
@@ -195,7 +228,7 @@ function publicSmartQuotePricingProfiles() {
 }
 
 async function publishSmartQuotePricingProfiles() {
-  if (!firebaseStore || !firebaseUser || applyingRemote) return;
+  if (!firebaseStore || !firebaseUser || applyingRemote || !canEditSharedRecords()) return;
   await firebaseStore.doc(SMARTQUOTE_CONFIG_DOC_PATH).set({
     pricingProfiles: firestoreSafe(publicSmartQuotePricingProfiles()),
     pricingUpdatedAt: firebase.firestore.FieldValue.serverTimestamp(),
@@ -229,6 +262,7 @@ let firebaseApp = null;
 let firebaseAuth = null;
 let firebaseStore = null;
 let firebaseUser = null;
+let firebaseUserRole = null;
 let cloudUnsubscribe = null;
 let smartQuoteConfigUnsubscribe = null;
 let applyingRemote = false;
@@ -298,6 +332,11 @@ function saveDb(options = {}) {
     } catch (_) { /* Invalid local cache is handled by loadDb. */ }
   }
   const { render = true, cloud = true } = options;
+  // Viewer may use calculators and draft/PDF features, but cannot persist shared records.
+  if (firebaseUser && !canEditSharedRecords()) {
+    if (render) renderAll();
+    return;
+  }
   localStorage.setItem(STORAGE_KEY, JSON.stringify(db));
   if (render) renderAll();
   if (cloud && firebaseUser && firebaseStore && !applyingRemote) scheduleCloudSave();
@@ -386,6 +425,7 @@ function startSmartQuoteConfigSync() {
 }
 
 async function saveSmartQuoteConfigNow(showToast = true) {
+  if (!requireEditorWrite()) return;
   if (!firebaseStore || !firebaseUser) {
     alert('Firebase admin login is required before saving the Smart Quote margin.');
     return;
@@ -437,26 +477,28 @@ function initFirebase() {
     firebaseStore = firebase.firestore();
     firebaseAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(() => {});
     firebaseAuth.onAuthStateChanged(async user => {
-      // Fail closed until Firestore confirms Editor permissions for this UID.
+      // Fail closed while resolving the user's Firestore role (Editor OR Viewer).
       firebaseUser = null;
+      firebaseUserRole = null;
       stopCloudSync();
       stopSmartQuoteConfigSync();
       showLogin();
-      if (user && !(await isApprovedEditorUser(user))) {
-        setCloudStatus('Cloud: unauthorized account — Editor role required', 'error');
+      const verifiedRole = user ? await getApprovedTriniDRole(user) : null;
+      if (user && !verifiedRole) {
+        setCloudStatus('Cloud: unauthorized account — Editor or Viewer role required', 'error');
         await firebaseAuth.signOut().catch(err => console.error('Could not sign out unauthorized account:', err));
         return;
       }
       if (user && firebaseAuth.currentUser?.uid !== user.uid) return;
       firebaseUser = user || null;
+      firebaseUserRole = verifiedRole;
       if (user) {
         showApp();
-        setCloudStatus(`Cloud: signed in as ${user.email || 'admin'}`, 'ok');
+        applyRoleUi();
+        setCloudStatus(`Cloud: ${verifiedRole === 'viewer' ? 'read-only synced' : 'editor signed in'} · ${user.email || ''}`, 'ok');
         startCloudSync();
         startSmartQuoteConfigSync();
       } else {
-        stopCloudSync();
-        stopSmartQuoteConfigSync();
         showLogin();
         setCloudStatus('Cloud: signed out', '');
       }
@@ -473,8 +515,12 @@ function startCloudSync() {
   const ref = firebaseStore.doc(CLOUD_DOC_PATH);
   cloudUnsubscribe = ref.onSnapshot(snapshot => {
     if (!snapshot.exists) {
-      setCloudStatus('Cloud: creating database...', 'syncing');
-      writeCloudNow();
+      if (canEditSharedRecords()) {
+        setCloudStatus('Cloud: creating database...', 'syncing');
+        writeCloudNow();
+      } else {
+        setCloudStatus('Cloud: no database found (Viewer cannot create records)', 'error');
+      }
       return;
     }
     const cloudPayload = snapshot.data() || {};
@@ -492,7 +538,8 @@ function startCloudSync() {
     renderAll();
     applyingRemote = false;
     cloudReady = true;
-    setCloudStatus('Cloud: realtime synced', 'ok');
+    applyRoleUi();
+    setCloudStatus(firebaseUserRole === 'viewer' ? 'Cloud: realtime synced · Viewer read-only' : 'Cloud: realtime synced · Editor', 'ok');
   }, err => {
     console.error(err);
     setCloudStatus('Cloud: sync error', 'error');
@@ -510,13 +557,14 @@ function stopCloudSync(clearUserStatus = true) {
 }
 
 function scheduleCloudSave() {
+  if (!canEditSharedRecords()) return;
   setCloudStatus('Cloud: saving...', 'syncing');
   clearTimeout(cloudWriteTimer);
   cloudWriteTimer = setTimeout(writeCloudNow, 350);
 }
 
 async function writeCloudNow() {
-  if (!firebaseStore || !firebaseUser || applyingRemote) return;
+  if (!firebaseStore || !firebaseUser || applyingRemote || !canEditSharedRecords()) return;
   try {
     // Exact replacement mode: every website save writes the whole admin database.
     // This prevents old bill/order/profit records from staying in Firebase after
@@ -598,6 +646,7 @@ function setSection(name) {
   $$('.admin-nav-link').forEach(btn => btn.classList.toggle('active', btn.dataset.section === name));
   $$('.admin-section').forEach(section => section.classList.toggle('active', section.id === `section-${name}`));
   if (name === 'database') renderDatabaseTable();
+  applyRoleUi();
   if (name === 'reports') generateWebsiteReport();
   window.scrollTo({ top: 0, behavior: 'smooth' });
 }
@@ -612,12 +661,13 @@ function initAuth() {
     try {
       setCloudStatus('Cloud: signing in...', 'syncing');
       const credential = await firebaseAuth.signInWithEmailAndPassword(email, password);
-      if (!(await isApprovedEditorUser(credential?.user))) {
+      const role = await getApprovedTriniDRole(credential?.user);
+      if (!role) {
         await firebaseAuth.signOut();
-        throw new Error('This account is not authorized. Firebase Editor role required.');
+        throw new Error('This account is not authorized. Firebase Editor or Viewer role required.');
       }
       $('#adminPassword').value = '';
-      toast('Approved Firebase administrator signed in');
+      toast(`Firebase ${role.toUpperCase()} signed in`);
     } catch (err) {
       console.error(err);
       setCloudStatus('Cloud: sign-in failed', 'error');
@@ -874,6 +924,7 @@ function resetJob() {
 }
 
 function saveCalculatorResultToItems() {
+  if (!requireEditorWrite()) return;
   const result = lastCalc || calculatePrice(false);
   if (!result) return;
   const fingerprint = calcFingerprint(result);
@@ -1530,6 +1581,7 @@ function fillInvoiceBankForm(raw) {
   });
 }
 function saveInvoiceBankDetails() {
+  if (!requireEditorWrite()) return;
   const details = invoiceBankFromForm();
   const saved = normalizeInvoiceBank(db.bankDetails);
   if (!bankPinConfigured()) {
@@ -1828,6 +1880,10 @@ function generateInvoice(e) {
   };
   printDocument(data);
   saveBillDraft();
+  if (!canEditSharedRecords()) {
+    toast('Invoice PDF generated. Viewer mode: shared database unchanged.');
+    return;
+  }
   const invoiceRecord = {
     id: id('INVOICE'), createdAt: nowStamp(), invoiceNo: data.no, orderId: data.no, customer: data.customer,
     date: data.date, subtotal: totals.subtotal, discount: totals.discount, overallDiscount: totals.overallDiscount, total: totals.total,
@@ -1873,6 +1929,7 @@ function buildQuotationDataFromForm() {
 
 function saveQuotationRecord(data) {
   if (!data) return;
+  if (!canEditSharedRecords()) return;
   db.quotes.unshift({
     id: id('QUOTE'),
     createdAt: nowStamp(),
@@ -1915,7 +1972,7 @@ function generateQuotation(e) {
   printDocument(data);
   printInternalQuotationDocument(data);
   saveQuotationRecord(data);
-  toast('Quotation saved. Customer and internal PDFs opened.');
+  toast(canEditSharedRecords() ? 'Quotation saved. Customer and internal PDFs opened.' : 'Quotation PDFs generated. Viewer mode: shared database unchanged.');
 }
 
 
@@ -2368,6 +2425,7 @@ function initDatabase() {
     activeDbTable = btn.dataset.dbTable;
     $$('.db-tab').forEach(b => b.classList.toggle('active', b === btn));
     renderDatabaseTable();
+    applyRoleUi();
   }));
   $('#dbSearch').addEventListener('input', renderDatabaseTable);
   $('#exportCsvBtn').addEventListener('click', exportActiveCsv);
@@ -2410,6 +2468,7 @@ function initDatabase() {
 }
 
 function createCustomGroup() {
+  if (!requireEditorWrite()) return;
   const name = $('#customGroupName').value.trim();
   if (!name) return alert('Enter custom group name.');
   db.customGroups.push({ id: id('GROUP'), name, createdAt: nowStamp() });
@@ -2418,6 +2477,7 @@ function createCustomGroup() {
 }
 
 function addSelectedToCustom() {
+  if (!requireEditorWrite()) return;
   const groupId = $('#customGroupSelect').value;
   if (!groupId) return alert('Create/select a custom group first.');
   if (!selectedItemIds.size) return alert('Tick Item Details records first.');
@@ -2442,6 +2502,7 @@ function editNumberValue(label, currentValue) {
 }
 
 function editItemRecord(itemId) {
+  if (!requireEditorWrite()) return;
   const item = db.itemRecords.find(r => r.id === itemId);
   if (!item) return;
   item.customer = editValue('Customer name', item.customer);
@@ -2461,6 +2522,7 @@ function editItemRecord(itemId) {
 }
 
 function editOrderRecord(orderId) {
+  if (!requireEditorWrite()) return;
   const order = db.orders.find(r => r.id === orderId);
   if (!order) return;
   order.orderId = editValue('Order ID', order.orderId);
@@ -2577,6 +2639,7 @@ function loadQuoteIntoEditor(recordId) {
 }
 
 function deleteRecord(recordId, kind) {
+  if (!requireEditorWrite()) return;
   if (!confirm('Delete this record?')) return;
   const map = { item: 'itemRecords', order: 'orders', invoice: 'invoices', quote: 'quotes', budget: 'budget', custom: 'customRecords' };
   const key = map[kind];
@@ -2644,6 +2707,7 @@ function itemToOrderData(item, overrideOrderId = null) {
 }
 
 function addSingleItemToOrders(itemId) {
+  if (!requireEditorWrite()) return;
   const item = db.itemRecords.find(r => r.id === itemId);
   if (!item) return alert('Item record not found.');
   const exists = db.orders.find(o => Array.isArray(o.sourceItemIds) && o.sourceItemIds.includes(itemId));
@@ -2654,6 +2718,7 @@ function addSingleItemToOrders(itemId) {
 }
 
 function addSelectedItemsToOrders() {
+  if (!requireEditorWrite()) return;
   const items = db.itemRecords.filter(item => selectedItemIds.has(item.id));
   if (!items.length) return alert('Tick one or more Item Details records first.');
   const duplicateCount = items.filter(item => db.orders.some(o => Array.isArray(o.sourceItemIds) && o.sourceItemIds.includes(item.id))).length;
@@ -2704,6 +2769,7 @@ function useSelectedItemsInBill() {
 }
 
 function updateOrderPaidStatus(orderId, paidStatus) {
+  if (!requireEditorWrite()) return;
   const order = db.orders.find(r => r.id === orderId);
   if (!order) return;
   order.paidStatus = paidStatus === 'Paid' ? 'Paid' : 'Unpaid';
@@ -2769,6 +2835,7 @@ function renderCustomGroups() {
 function initBudget() {
   $('#budgetForm').addEventListener('submit', e => {
     e.preventDefault();
+    if (!requireEditorWrite()) return;
     const editId = $('#budgetEditId') ? $('#budgetEditId').value : '';
     const payload = {
       entryDate: $('#budgetDate').value || todayISO(),
@@ -2813,6 +2880,7 @@ function resetBudgetForm() {
 }
 
 function editBudgetRecord(recordId) {
+  if (!requireEditorWrite()) return;
   const record = db.budget.find(r => r.id === recordId);
   if (!record) return alert('Budget record not found.');
   $('#budgetEditId').value = record.id;
@@ -2830,6 +2898,7 @@ function editBudgetRecord(recordId) {
 }
 
 function syncOrdersToBudget() {
+  if (!requireEditorWrite()) return;
   const existing = new Set(db.budget.filter(r => r.source === 'Order').map(r => `${r.sourceId}-${r.entryType}-${r.category}`));
   let added = 0;
   db.orders.forEach(order => {
@@ -3026,6 +3095,7 @@ function sqlRows(sqlDb, table) {
 }
 
 async function importDesktopSqlite(file) {
+  if (!requireEditorWrite()) return;
   if (typeof initSqlJs !== 'function') {
     alert('SQLite reader did not load. Use the included Python converter in the tools folder, then import the converted JSON backup.');
     return;
@@ -3532,6 +3602,7 @@ function initSettings() {
   $('#exportJsonBtn').addEventListener('click', exportJson);
   $('#saveSnapshotBtn').addEventListener('click', exportJson);
   $('#importJsonInput').addEventListener('change', e => {
+    if (!requireEditorWrite()) { e.target.value = ''; return; }
     const file = e.target.files[0];
     if (!file) return;
     const reader = new FileReader();
@@ -3548,12 +3619,14 @@ function initSettings() {
     reader.readAsText(file);
   });
   $('#importDesktopDbInput').addEventListener('change', e => {
+    if (!requireEditorWrite()) { e.target.value = ''; return; }
     const file = e.target.files[0];
     if (!file) return;
     importDesktopSqlite(file);
     e.target.value = '';
   });
   $('#clearDbBtn').addEventListener('click', () => {
+    if (!requireEditorWrite()) return;
     if (!confirm('This will clear the Firebase cloud admin database and the local cache. Continue?')) return;
     db = defaultDb();
     saveDb();
@@ -3571,6 +3644,7 @@ function renderAll() {
   renderDatabaseTable();
   renderBudget();
   if ($('#section-reports')?.classList.contains('active')) generateWebsiteReport(false);
+  applyRoleUi();
 }
 
 function init() {
