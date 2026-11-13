@@ -16,13 +16,13 @@
   <div class="admin-login" id="adminLogin">
     <div class="login-card">
       <img src="../assets/logo.jpg?v=58" alt="Trini-D logo" />
-      <span class="eyebrow">Admin Only</span>
+      <span class="eyebrow">Secure Access</span>
       <h1>Trini-D Control Panel</h1>
-      <p class="muted">Sign in with your Firebase admin email and password to open the cloud database tools.</p>
+      <p class="muted">Sign in with your Firebase email and password to continue.</p>
       <form id="loginForm" class="login-form">
         <label class="field">
-          <span>Admin Email</span>
-          <input type="email" id="adminEmail" placeholder="admin email" autocomplete="username" required />
+          <span>Email Address</span>
+          <input type="email" id="adminEmail" placeholder="your email address" autocomplete="username" required />
         </label>
         <label class="field">
           <span>Password</span>
@@ -68,8 +68,7 @@
         </div>
         <div class="admin-top-actions">
           <button class="btn ghost admin-theme-toggle" id="adminThemeToggle" type="button" aria-label="Switch color mode"><span class="theme-icon">☀️</span><span class="theme-text">Light</span></button>
-          <span class="cloud-status" id="roleIndicator">Checking role...</span>
-          <span class="cloud-status" id="roleIndicator">Checking role...</span>
+          <span class="cloud-status" id="accountEmail" aria-label="Signed-in account"></span>
           <span class="cloud-status" id="cloudStatus">Cloud: connecting...</span>
           <button class="btn ghost" id="saveSnapshotBtn" type="button">Export JSON</button>
           <button class="btn primary" data-section-jump="calculator" type="button">New Price</button>
@@ -482,7 +481,7 @@
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-auth-compat.js"></script>
   <script src="https://www.gstatic.com/firebasejs/10.12.5/firebase-firestore-compat.js"></script>
   <script src="firebase-config.js"></script>
-  <script src="admin.js?v=69"></script>
+  <script src="admin.js?v=70"></script>
   <dialog id="invoiceBankPinDialog" class="invoice-bank-pin-dialog" aria-labelledby="invoiceBankPinTitle">
     <form id="invoiceBankPinForm" novalidate>
       <h3 id="invoiceBankPinTitle">Bank Account PIN</h3>

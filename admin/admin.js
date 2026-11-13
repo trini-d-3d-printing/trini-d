@@ -30,14 +30,14 @@ async function getApprovedTriniDRole(user) {
 function canEditSharedRecords() { return firebaseUserRole === 'editor'; }
 function requireEditorWrite() {
   if (canEditSharedRecords()) return true;
-  toast('Viewer access: Shared database records cannot be created, edited or deleted.');
+  toast('Your account cannot change shared database records.');
   return false;
 }
 function applyRoleUi() {
   const viewer = firebaseUserRole === 'viewer';
   document.body.classList.toggle('trinid-viewer-mode', viewer);
-  const heading = $('#roleIndicator');
-  if (heading) heading.textContent = viewer ? 'VIEWER · all features · shared records read-only' : 'EDITOR · full database access';
+  const accountLabel = $('#accountEmail');
+  if (accountLabel) accountLabel.textContent = firebaseUser?.email || '';
   const writeSelectors = [
     '#saveCalcBtn', '#createCustomGroupBtn', '#addSelectedToCustomBtn',
     '#addSelectedToOrdersBtn', '#budgetSaveBtn', '#syncBudgetBtn',
@@ -48,13 +48,13 @@ function applyRoleUi() {
     const element = $(selector);
     if (!element) continue;
     element.disabled = viewer;
-    element.title = viewer ? 'Editor only: this action changes shared records' : '';
+    element.title = viewer ? 'You cannot change shared records with this account' : '';
   }
   // Dynamic action buttons are rebuilt whenever the records table refreshes.
   $$('[data-edit-item],[data-edit-order],[data-delete],[data-budget-edit],[data-item-to-order],'+
      '[data-order-paid]').forEach(element => {
     element.disabled = viewer;
-    element.title = viewer ? 'Editor only: changes shared records' : '';
+    element.title = viewer ? 'You cannot change shared records with this account' : '';
   });
   // G-code, reporting, browsing, export and PDF controls remain accessible.
 }
@@ -485,7 +485,7 @@ function initFirebase() {
       showLogin();
       const verifiedRole = user ? await getApprovedTriniDRole(user) : null;
       if (user && !verifiedRole) {
-        setCloudStatus('Cloud: unauthorized account — Editor or Viewer role required', 'error');
+        setCloudStatus('Cloud: unauthorized account', 'error');
         await firebaseAuth.signOut().catch(err => console.error('Could not sign out unauthorized account:', err));
         return;
       }
@@ -495,7 +495,7 @@ function initFirebase() {
       if (user) {
         showApp();
         applyRoleUi();
-        setCloudStatus(`Cloud: ${verifiedRole === 'viewer' ? 'read-only synced' : 'editor signed in'} · ${user.email || ''}`, 'ok');
+        setCloudStatus('Cloud: connected', 'ok');
         startCloudSync();
         startSmartQuoteConfigSync();
       } else {
@@ -519,7 +519,7 @@ function startCloudSync() {
         setCloudStatus('Cloud: creating database...', 'syncing');
         writeCloudNow();
       } else {
-        setCloudStatus('Cloud: no database found (Viewer cannot create records)', 'error');
+        setCloudStatus('Cloud: database unavailable', 'error');
       }
       return;
     }
@@ -539,7 +539,7 @@ function startCloudSync() {
     applyingRemote = false;
     cloudReady = true;
     applyRoleUi();
-    setCloudStatus(firebaseUserRole === 'viewer' ? 'Cloud: realtime synced · Viewer read-only' : 'Cloud: realtime synced · Editor', 'ok');
+    setCloudStatus('Cloud: realtime synced', 'ok');
   }, err => {
     console.error(err);
     setCloudStatus('Cloud: sync error', 'error');
@@ -664,10 +664,10 @@ function initAuth() {
       const role = await getApprovedTriniDRole(credential?.user);
       if (!role) {
         await firebaseAuth.signOut();
-        throw new Error('This account is not authorized. Firebase Editor or Viewer role required.');
+        throw new Error('This account is not authorized for Trini-D.');
       }
       $('#adminPassword').value = '';
-      toast(`Firebase ${role.toUpperCase()} signed in`);
+      toast('Signed in successfully');
     } catch (err) {
       console.error(err);
       setCloudStatus('Cloud: sign-in failed', 'error');
@@ -1881,7 +1881,7 @@ function generateInvoice(e) {
   printDocument(data);
   saveBillDraft();
   if (!canEditSharedRecords()) {
-    toast('Invoice PDF generated. Viewer mode: shared database unchanged.');
+    toast('Invoice PDF generated. Shared database unchanged.');
     return;
   }
   const invoiceRecord = {
@@ -1972,7 +1972,7 @@ function generateQuotation(e) {
   printDocument(data);
   printInternalQuotationDocument(data);
   saveQuotationRecord(data);
-  toast(canEditSharedRecords() ? 'Quotation saved. Customer and internal PDFs opened.' : 'Quotation PDFs generated. Viewer mode: shared database unchanged.');
+  toast(canEditSharedRecords() ? 'Quotation saved. Customer and internal PDFs opened.' : 'Quotation PDFs generated. Shared database unchanged.');
 }
 
 
