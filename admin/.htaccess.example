@@ -1,0 +1,10 @@
+# Example Apache/cPanel basic authentication for the admin folder.
+# Rename this to .htaccess only after setting the correct AuthUserFile path on your hosting.
+
+AuthType Basic
+AuthName "Trini-D Admin Only"
+AuthUserFile /home/YOUR_CPANEL_USERNAME/.htpasswds/admin/passwd
+Require valid-user
+
+# Optional: prevent search indexing
+Header set X-Robots-Tag "noindex, nofollow"

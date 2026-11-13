@@ -11,9 +11,20 @@ const INVOICE_BANK_PIN_LOCK_MS = 5 * 60 * 1000;
 const INVOICE_BANK_UNLOCK_MS = 90 * 1000;
 const INVOICE_BANK_FIELDS = [['name','billBankName'], ['holder','billBankHolder'], ['account','billBankAccount'], ['branch','billBankBranch'], ['swift','billBankSwift'], ['reference','billBankReference']];
 const CLOUD_DOC_PATH = 'trinid/default';
-// Only this approved Firebase Authentication identity can enter the admin UI.
-// Firestore rules must independently enforce the same UID.
-const TRINID_ADMIN_UID = '7D4nUPaMXIW6Lnz5ST7A6raV22O2';
+// Editor authorization is read from Firestore role documents, not hardcoded UID.
+// Firestore Security Rules MUST independently enforce editor-only writes.
+const TRINID_ROLE_COLLECTION = 'trinid_roles';
+async function isApprovedEditorUser(user) {
+  if (!user || !firebaseStore) return false;
+  try {
+    const doc = await firebaseStore.doc(`${TRINID_ROLE_COLLECTION}/${user.uid}`)
+      .get({ source: 'server' });
+    return doc.exists && doc.data()?.role === 'editor';
+  } catch (err) {
+    console.warn('Could not verify editor role:', err);
+    return false;
+  }
+}
 const SMARTQUOTE_CONFIG_DOC_PATH = 'trinid/default/public/smartquote';
 
 const $ = (sel, root = document) => root.querySelector(sel);
@@ -425,18 +436,18 @@ function initFirebase() {
     firebaseAuth = firebase.auth();
     firebaseStore = firebase.firestore();
     firebaseAuth.setPersistence(firebase.auth.Auth.Persistence.LOCAL).catch(() => {});
-    firebaseAuth.onAuthStateChanged(user => {
-      // Prevent other email users and anonymous accounts from opening the
-      // cached admin dashboard. Server-side Firestore rules remain mandatory.
-      if (user && user.uid !== TRINID_ADMIN_UID) {
-        firebaseUser = null;
-        stopCloudSync();
-        stopSmartQuoteConfigSync();
-        showLogin();
-        setCloudStatus('Cloud: unauthorized account — use main admin login', 'error');
-        firebaseAuth.signOut().catch(err => console.error('Could not sign out unauthorized account:', err));
+    firebaseAuth.onAuthStateChanged(async user => {
+      // Fail closed until Firestore confirms Editor permissions for this UID.
+      firebaseUser = null;
+      stopCloudSync();
+      stopSmartQuoteConfigSync();
+      showLogin();
+      if (user && !(await isApprovedEditorUser(user))) {
+        setCloudStatus('Cloud: unauthorized account — Editor role required', 'error');
+        await firebaseAuth.signOut().catch(err => console.error('Could not sign out unauthorized account:', err));
         return;
       }
+      if (user && firebaseAuth.currentUser?.uid !== user.uid) return;
       firebaseUser = user || null;
       if (user) {
         showApp();
@@ -601,9 +612,9 @@ function initAuth() {
     try {
       setCloudStatus('Cloud: signing in...', 'syncing');
       const credential = await firebaseAuth.signInWithEmailAndPassword(email, password);
-      if (credential?.user?.uid !== TRINID_ADMIN_UID) {
+      if (!(await isApprovedEditorUser(credential?.user))) {
         await firebaseAuth.signOut();
-        throw new Error('This account is not authorized. Sign in with the main Trini-D administrator account.');
+        throw new Error('This account is not authorized. Firebase Editor role required.');
       }
       $('#adminPassword').value = '';
       toast('Approved Firebase administrator signed in');
